@@ -15,8 +15,9 @@ int verbose = 0;
 
 typedef long long int number;
 #define FMT "%lld "
-#define DEFAULT_ARRAY_LEN 20
-#define DEFAULT_NUM_THREADS 3
+#define DEFAULT_ARRAY_LEN 15
+#define DEFAULT_TARGET 19
+#define DEFAULT_NUM_THREADS 2
 
 void _init(int argc, char ** argv);
 void _init_array(int with_file);
@@ -210,6 +211,7 @@ void _init(int argc, char ** argv)
 { 
 	X_len = DEFAULT_ARRAY_LEN;
 	num_threads = DEFAULT_NUM_THREADS;
+	target = DEFAULT_TARGET;
 	fname[0] = 0;
 
 	for(int i=1; i<argc; i++){
@@ -242,7 +244,7 @@ void _init_array(int with_file)
 	//not use file
 	if(!with_file){
 		for(number i=0; i<X_len; i++){
-			host_X[i] = i;
+			host_X[i] = 2 * i;
 		}
 		return;
 	}
