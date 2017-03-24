@@ -8,19 +8,7 @@
  *		p146 - ISBN 9-789201-548563
  */
 
-#include <stdio.h>
-#include "../gpu_utils/util.h"
-
-int verbose = 0;
-
-typedef long long int number;
-#define FMT "%lld "
-#define DEFAULT_ARRAY_LEN 15
-#define DEFAULT_TARGET 19
-#define DEFAULT_NUM_THREADS 2
-
-void _init(int argc, char ** argv);
-void _init_array(int with_file);
+#include "parallel_search.h"
 
 ///////////////////////////////////////////////////////////
 // Input to the algorithm //
@@ -38,45 +26,45 @@ void _init_array(int with_file);
 // additional inputs
 int * c;
 // c										-- c array from 0 to p+1
-number * q;
+int * q;
 // q										-- q array from 0 to p+1
 __device__ int l;
 // l										
 __device__ int r;
 // r
 // n is the number of elements
-__global__ void search(number * X, int n, number target, int * c, number * q, int num_threads, int * dev_ret){
+__global__ void search(number * X, int n, number target, int * c, int * q, int num_threads, int * dev_ret){
 	int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
 	tid += 1; // so that idx starts from 1
 
 	//1.
-	printf("t0 : %d\n", tid);
 	if(tid == 1){
 		l = 0;
 		r = n + 1;
-		printf("t : %d\n", tid);
 		X[0] = INT_MIN;
 		X[n + 1] = INT_MAX;
 		c[0] = 0;
 		c[num_threads + 1] = 1;
 
-		*dev_ret = -1;
-
+		*dev_ret = -1; // for thread termination purpose
 	}
-	//show c now
-	if(tid == 1)
-		printf("| q0 | q1 | q2 | q3 | c0 | c1 | c2 | c3 | l  | r  |\n");
 
+#ifdef PRETTY_PRINT
+	if(tid == 1){
+		for(int i=0; i<n+2; i++) printf("%d ", X[i]); 
+		printf("\n");
+		printf("| q0 | q1 | q2 | q3 | c0 | c1 | c2 | c3 | l  | r  |\n");
+	}
+#endif
 
 	//sync
 	__syncthreads();
 
 	//2.
-	while(r - l > num_threads){
+	int count = 0;
 
-		if(tid == 1)
-			printf("|%4lld|%4lld|%4lld|%4lld|%4d|%4d|%4d|%4d|%4d|%4d|\n", q[0], q[1], q[2], q[3], c[0], c[1], c[2], c[3], l, r);
+	while(r - l > num_threads){
 
 		if(tid == 1){
 			q[0] = l;
@@ -106,13 +94,15 @@ __global__ void search(number * X, int n, number target, int * c, number * q, in
 		//     -- set l, r, c
 		__syncthreads();
 		// if ret has been set, return, a replacement for the "return" in the conditional statement;
-		if(tid == 1)
-			printf("dev ret : %d\n", *dev_ret);
 		if(*dev_ret > 0){
+#ifdef PRETTY_PRINT
+			if(tid == 1)
+				printf("dev ret0 : %d\n", *dev_ret);
+#endif
 			return;
 		}
 
-		if(c[tid] < c[tid]){
+		if(c[tid] < c[tid + 1]){
 			l = q[tid];
 			r = q[tid + 1];
 		}
@@ -125,6 +115,16 @@ __global__ void search(number * X, int n, number target, int * c, number * q, in
 		//sync -- use q, c, tid
 		//		 -- set l, r
 		__syncthreads();
+
+#ifdef PRETTY_PRINT
+		if(tid == 1)
+			printf("|%4d|%4d|%4d|%4d|%4d|%4d|%4d|%4d|%4d|%4d|\n", q[0], q[1], q[2], q[3], c[0], c[1], c[2], c[3], l, r);
+#endif
+
+		if(++count > 10){
+			printf("oops\n");
+			return;
+		}
 	}
 
 	if(tid > r - l) return;
@@ -139,48 +139,40 @@ __global__ void search(number * X, int n, number target, int * c, number * q, in
 		c[tid] = 1;
 	}
 
+#ifdef PRETTY_PRINT
+	printf("dev ret1 : %d\n", *dev_ret);
+#endif
 	if(*dev_ret > 0)
 		return;
 
 	if(c[tid-1] < c[tid])
 		*dev_ret = l + tid - 1;
+#ifdef PRETTY_PRINT
+	printf("dev ret2 : %d\n", *dev_ret);
+#endif
 }
 
-// CPU
-number target;
-number * host_X;
-int X_len;
-unsigned int num_threads;
-// GPU
-__device__ number * dev_X;
-
+// main
 int main(int argc, char * argv[]) 
 {
 	setbuf(stdout, NULL);
 	_init(argc, argv);
 
 	cudaError_t err_code[10];
-	float gputime;
+	float gputime, cputime;
 	int ret_idx, * dev_ret;
 	
 	cudaSetDevice(0);
 	cudaDeviceReset();
 
-	unsigned int X_size = (X_len + 2) * sizeof(number);
-	unsigned int c_size = (num_threads + 2) * sizeof(int);
-	unsigned int q_size = (num_threads + 2) * sizeof(number);
-
 	// X_len + 2 for the algorithm element at idx 0 and n + 1 (originally 1, 2, ..., n)
-	gerror(cudaMalloc( &dev_X , X_size ));
-	gerror(cudaMalloc( &c , c_size ));
-	gerror(cudaMalloc( &q , q_size ));
-	gerror(cudaMalloc( &dev_ret , sizeof(int) ));
-	/*
 	err_code[0] = cudaMalloc( &dev_X , X_size );
-	err_code[1] = cudaMalloc( &c, c_size ); //just 0 and 1s could use int
-	err_code[2] = cudaMalloc( &q, q_size );
-	for(int i=0; i<3; i++){ gerror(err_code[i]); }
-	*/
+	err_code[1] = cudaMalloc( &c , c_size );
+	err_code[2] = cudaMalloc( &q , q_size );
+	err_code[3] = cudaMalloc( &dev_ret , sizeof(int) );
+	for(int i=0; i<4; i++){ gerror(err_code[i]); }
+
+	gerror(cudaMemcpy(dev_X, host_X, X_size, cudaMemcpyHostToDevice));
 
 	unsigned int num_blocks = num_threads > 1024 ? num_threads / 1024 + 1 : 1;
 	unsigned int threads_per_block = num_threads > 1024 ? 1024 : num_threads;
@@ -199,7 +191,13 @@ int main(int argc, char * argv[])
 	gerror( cudaDeviceSynchronize() );
 
 	gerror(cudaMemcpy(&ret_idx, dev_ret, sizeof(int), cudaMemcpyDeviceToHost));
-	printf("idx = %d;\n", ret_idx);
+	printf("device idx = %d;\n", ret_idx);
+
+	cstart();
+	ret_idx = cpu_search(host_X + 1, X_len, target);
+	cend(&cputime);
+	printf("cputime : %f ms\n", cputime);
+	printf("host idx = %d;\n", ret_idx);
 
 	gerror(cudaFree(dev_X));
 	gerror(cudaFree(c));
@@ -215,6 +213,8 @@ void _init(int argc, char ** argv)
 	target = DEFAULT_TARGET;
 	fname[0] = 0;
 
+	int len_spec = 0;
+
 	for(int i=1; i<argc; i++){
 		switch(*argv[i]){
 			case '-':
@@ -223,10 +223,19 @@ void _init(int argc, char ** argv)
 						verbose = 1;
 						break;
 					case 'f':
-						strcpy(fname, argv[++i]);
+						if(!len_spec){
+							strcpy(fname, argv[++i]);
+							len_spec = 1;
+						}
 						break;
 					case 't':
 						sscanf(argv[++i], "%d", &num_threads);
+						break;
+					case 'l':
+						if(!len_spec){
+							sscanf(argv[++i], "%d", &X_len);
+							len_spec = 1;
+						}
 						break;
 				}
 				break;
@@ -235,16 +244,20 @@ void _init(int argc, char ** argv)
 		}
 	}
 
+	X_size = (X_len + 2) * sizeof(number);
+	c_size = (num_threads + 2) * sizeof(int);
+	q_size = (num_threads + 2) * sizeof(int);
+
 	_init_array(fname[0] != 0);
 }
 
 void _init_array(int with_file)
 {
-	host_X = (number *) malloc(X_len * sizeof(number));
+	host_X = (number *) malloc(X_size);
 
 	//not use file
 	if(!with_file){
-		for(number i=0; i<X_len; i++){
+		for(number i=1; i<X_len+1; i++){
 			host_X[i] = 2 * i;
 		}
 		return;
