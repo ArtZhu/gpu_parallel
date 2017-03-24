@@ -156,6 +156,7 @@ __device__ number * dev_X;
 
 int main(int argc, char * argv[]) 
 {
+	setbuf(stdout, NULL);
 	_init(argc, argv);
 
 	cudaError_t err_code[10];
@@ -191,7 +192,7 @@ int main(int argc, char * argv[])
 	d->Dg = {num_blocks, 1, 1};
 	d->Db = {threads_per_block, 1, 1};
 	gstart();
-	search<<<d->Dg, d->Db>>>(dev_X, X_len, target, c, q, num_threads, dev_ret);
+	//search<<<d->Dg, d->Db>>>(dev_X, X_len, target, c, q, num_threads, dev_ret);
 	gend(&gputime);
 	printf("gputime : %f ms\n", gputime);
 	gerror(cudaGetLastError());
