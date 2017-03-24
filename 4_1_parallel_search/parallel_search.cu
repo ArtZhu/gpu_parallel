@@ -32,20 +32,19 @@ void _init_array(int with_file);
 // i (ret) 							-- X[i] <= y < x[i+1]
 //		[ i is initialized to -1 , since it has only non-neg values
 //			i non-neg => i set ]
-__device__ int dev_ret;
 ///////////////////////////////////////////////////////////
 /* kernel strictly following algorithm */
 // additional inputs
-__device__ int * c;
+int * c;
 // c										-- c array from 0 to p+1
-__device__ number * q;
+number * q;
 // q										-- q array from 0 to p+1
 __device__ int l;
 // l										
 __device__ int r;
 // r
 // n is the number of elements
-__global__ void search(number * X, int n, number target, int * c, number * q, int num_threads){
+__global__ void search(number * X, int n, number target, int * c, number * q, int num_threads, int * dev_ret){
 	int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
 	tid += 1; // so that idx starts from 1
@@ -60,14 +59,24 @@ __global__ void search(number * X, int n, number target, int * c, number * q, in
 		X[n + 1] = INT_MAX;
 		c[0] = 0;
 		c[num_threads + 1] = 1;
+
+		*dev_ret = -1;
+
 	}
 	//show c now
+	if(tid == 1)
+		printf("| q0 | q1 | q2 | q3 | c0 | c1 | c2 | c3 | l  | r  |\n");
+
 
 	//sync
 	__syncthreads();
 
 	//2.
 	while(r - l > num_threads){
+
+		if(tid == 1)
+			printf("|%4lld|%4lld|%4lld|%4lld|%4d|%4d|%4d|%4d|%4d|%4d|\n", q[0], q[1], q[2], q[3], c[0], c[1], c[2], c[3], l, r);
+
 		if(tid == 1){
 			q[0] = l;
 			q[num_threads + 1] = r;
@@ -80,7 +89,7 @@ __global__ void search(number * X, int n, number target, int * c, number * q, in
 		__syncthreads();
 
 		if(target == X[q[tid]]){
-			dev_ret = q[tid];
+			*dev_ret = q[tid];
 			// can i return here???
 			// no
 			//return;
@@ -96,8 +105,11 @@ __global__ void search(number * X, int n, number target, int * c, number * q, in
 		//     -- set l, r, c
 		__syncthreads();
 		// if ret has been set, return, a replacement for the "return" in the conditional statement;
-		if(dev_ret > 0)
+		if(tid == 1)
+			printf("dev ret : %d\n", *dev_ret);
+		if(*dev_ret > 0){
 			return;
+		}
 
 		if(c[tid] < c[tid]){
 			l = q[tid];
@@ -117,8 +129,7 @@ __global__ void search(number * X, int n, number target, int * c, number * q, in
 	if(tid > r - l) return;
 
 	if(target == X[l+tid]){
-		dev_ret = l + tid;
-		return;
+		*dev_ret = l + tid;
 	}
 	else if(target > X[l+tid]){
 		c[tid] = 0;
@@ -127,30 +138,12 @@ __global__ void search(number * X, int n, number target, int * c, number * q, in
 		c[tid] = 1;
 	}
 
-	if(c[tid-1] < c[tid])
-		dev_ret = l + tid - 1;
-}
+	if(*dev_ret > 0)
+		return;
 
-// X 										-- strictly ordered array
-// y (target) 					-- target
-// p (num_threads) 			-- num_processor
-// j (tid) 							-- processor idx
-///////////////////////////////////////////////////////////
-// Output 
-// i (ret) 							-- X[i] <= y < x[i+1]
-//		[ i is initialized to -1 , since it has only non-neg values
-//			i non-neg => i set ]
-///////////////////////////////////////////////////////////
-/* kernel strictly following algorithm */
-// additional inputs
-//__device__ int * c;
-// c										-- c array from 0 to p+1
-//__device__ int * q;
-// q										-- q array from 0 to p+1
-//__device__ int l;
-// l										
-//__device__ int r;
-// r
+	if(c[tid-1] < c[tid])
+		*dev_ret = l + tid - 1;
+}
 
 // CPU
 number target;
@@ -166,7 +159,7 @@ int main(int argc, char * argv[])
 
 	cudaError_t err_code[10];
 	float gputime;
-	int ret_idx;
+	int ret_idx, * dev_ret;
 	
 	cudaSetDevice(0);
 	cudaDeviceReset();
@@ -176,10 +169,16 @@ int main(int argc, char * argv[])
 	unsigned int q_size = (num_threads + 2) * sizeof(number);
 
 	// X_len + 2 for the algorithm element at idx 0 and n + 1 (originally 1, 2, ..., n)
+	gerror(cudaMalloc( &dev_X , X_size ));
+	gerror(cudaMalloc( &c , c_size ));
+	gerror(cudaMalloc( &q , q_size ));
+	gerror(cudaMalloc( &dev_ret , sizeof(int) ));
+	/*
 	err_code[0] = cudaMalloc( &dev_X , X_size );
-	err_code[1] = cudaMalloc( &c,  c_size ); //just 0 and 1s could use int
+	err_code[1] = cudaMalloc( &c, c_size ); //just 0 and 1s could use int
 	err_code[2] = cudaMalloc( &q, q_size );
 	for(int i=0; i<3; i++){ gerror(err_code[i]); }
+	*/
 
 	unsigned int num_blocks = num_threads > 1024 ? num_threads / 1024 + 1 : 1;
 	unsigned int threads_per_block = num_threads > 1024 ? 1024 : num_threads;
@@ -191,13 +190,13 @@ int main(int argc, char * argv[])
 	d->Dg = {num_blocks, 1, 1};
 	d->Db = {threads_per_block, 1, 1};
 	gstart();
-	search<<<d->Dg, d->Db>>>(dev_X, X_len, target, c, q, num_threads);
+	search<<<d->Dg, d->Db>>>(dev_X, X_len, target, c, q, num_threads, dev_ret);
 	gend(&gputime);
 	printf("gputime : %f ms\n", gputime);
 	gerror(cudaGetLastError());
 	gerror( cudaDeviceSynchronize() );
 
-	cudaMemcpy(&ret_idx, &dev_ret, sizeof(int), cudaMemcpyDeviceToHost);
+	gerror(cudaMemcpy(&ret_idx, dev_ret, sizeof(int), cudaMemcpyDeviceToHost));
 	printf("idx = %d;\n", ret_idx);
 
 	gerror(cudaFree(dev_X));
