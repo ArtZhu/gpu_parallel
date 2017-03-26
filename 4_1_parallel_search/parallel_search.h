@@ -15,8 +15,8 @@ int verbose = 0;
 
 //#define PRETTY_PRINT 1
 
-typedef long long int number;
-#define FMT "%lld "
+typedef int number;
+#define FMT "%d "
 #define DEFAULT_ARRAY_LEN 15
 #define DEFAULT_TARGET 19
 #define DEFAULT_NUM_THREADS 2

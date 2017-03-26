@@ -38,6 +38,8 @@ __global__ void search(number * X, int n, number target, int * c, int * q, int n
 
 	tid += 1; // so that idx starts from 1
 
+	if(tid > n) return; // safety
+
 	//1.
 	if(tid == 1){
 		l = 0;
@@ -52,9 +54,10 @@ __global__ void search(number * X, int n, number target, int * c, int * q, int n
 
 #ifdef PRETTY_PRINT
 	if(tid == 1){
-		for(int i=0; i<n+2; i++) printf("%d ", X[i]); 
-		printf("\n");
-		printf("| q0 | q1 | q2 | q3 | c0 | c1 | c2 | c3 | l  | r  |\n");
+		//for(int i=0; i<n+2; i++) printf("%d ", X[i]); 
+		//printf("\n");
+		//printf("| q0 | q1 | q2 | q3 | c0 | c1 | c2 | c3 | l  | r  |\n");
+		printf("%d %d\n", r, l);
 	}
 #endif
 
@@ -62,7 +65,6 @@ __global__ void search(number * X, int n, number target, int * c, int * q, int n
 	__syncthreads();
 
 	//2.
-	int count = 0;
 
 	while(r - l > num_threads){
 
@@ -78,7 +80,7 @@ __global__ void search(number * X, int n, number target, int * c, int * q, int n
 		__syncthreads();
 
 		if(target == X[q[tid]]){
-			*dev_ret = q[tid];
+			*dev_ret = q[tid] - 1; // so that ret idx starts from 0
 			// can i return here???
 			// no
 			//return;
@@ -94,7 +96,7 @@ __global__ void search(number * X, int n, number target, int * c, int * q, int n
 		//     -- set l, r, c
 		__syncthreads();
 		// if ret has been set, return, a replacement for the "return" in the conditional statement;
-		if(*dev_ret > 0){
+		if(*dev_ret >= 0){
 #ifdef PRETTY_PRINT
 			if(tid == 1)
 				printf("dev ret0 : %d\n", *dev_ret);
@@ -102,10 +104,12 @@ __global__ void search(number * X, int n, number target, int * c, int * q, int n
 			return;
 		}
 
+
 		if(c[tid] < c[tid + 1]){
 			l = q[tid];
 			r = q[tid + 1];
 		}
+
 
 		if(tid == 1 && c[0] < c[1]){
 			l = q[0];
@@ -116,21 +120,19 @@ __global__ void search(number * X, int n, number target, int * c, int * q, int n
 		//		 -- set l, r
 		__syncthreads();
 
+
 #ifdef PRETTY_PRINT
 		if(tid == 1)
-			printf("|%4d|%4d|%4d|%4d|%4d|%4d|%4d|%4d|%4d|%4d|\n", q[0], q[1], q[2], q[3], c[0], c[1], c[2], c[3], l, r);
+			printf("%d %d\n", r, l);
+			//printf("|%4d|%4d|%4d|%4d|%4d|%4d|%4d|%4d|%4d|%4d|\n", q[0], q[1], q[2], q[3], c[0], c[1], c[2], c[3], l, r);
 #endif
 
-		if(++count > 10){
-			printf("oops\n");
-			return;
-		}
 	}
 
 	if(tid > r - l) return;
 
 	if(target == X[l+tid]){
-		*dev_ret = l + tid;
+		*dev_ret = l + tid - 1; // so that ret idx starts from 0
 	}
 	else if(target > X[l+tid]){
 		c[tid] = 0;
@@ -139,14 +141,15 @@ __global__ void search(number * X, int n, number target, int * c, int * q, int n
 		c[tid] = 1;
 	}
 
+
 #ifdef PRETTY_PRINT
 	printf("dev ret1 : %d\n", *dev_ret);
 #endif
-	if(*dev_ret > 0)
+	if(*dev_ret >= 0)
 		return;
 
 	if(c[tid-1] < c[tid])
-		*dev_ret = l + tid - 1;
+		*dev_ret = l + tid - 1 - 1; // so that ret idx starts from 0
 #ifdef PRETTY_PRINT
 	printf("dev ret2 : %d\n", *dev_ret);
 #endif
@@ -156,6 +159,9 @@ __global__ void search(number * X, int n, number target, int * c, int * q, int n
 int main(int argc, char * argv[]) 
 {
 	_init(argc, argv);
+
+	if(verbose)
+		printf("finding target : %d in array of length %d\n", target, X_len);
 
 	cudaError_t err_code[10];
 	float gputime, cputime;
@@ -173,7 +179,7 @@ int main(int argc, char * argv[])
 
 	gerror(cudaMemcpy(dev_X, host_X, X_size, cudaMemcpyHostToDevice));
 
-	unsigned int num_blocks = num_threads > 1024 ? num_threads / 1024 + 1 : 1;
+	unsigned int num_blocks = (1023 + num_threads) / 1024;
 	unsigned int threads_per_block = num_threads > 1024 ? 1024 : num_threads;
 
 	ret_idx = 10086;
@@ -192,6 +198,8 @@ int main(int argc, char * argv[])
 	gerror(cudaMemcpy(&ret_idx, dev_ret, sizeof(int), cudaMemcpyDeviceToHost));
 	printf("device idx = %d;\n", ret_idx);
 
+	ret_idx = 10086;
+
 	cstart();
 	ret_idx = cpu_search(host_X + 1, X_len, target);
 	cend(&cputime);
@@ -201,6 +209,7 @@ int main(int argc, char * argv[])
 	gerror(cudaFree(dev_X));
 	gerror(cudaFree(c));
 	gerror(cudaFree(q));
+	gerror(cudaFree(dev_ret));
 	free(host_X);
 }
 
@@ -248,6 +257,8 @@ void _init(int argc, char ** argv)
 	q_size = (num_threads + 2) * sizeof(int);
 
 	_init_array(fname[0] != 0);
+	
+	prep_kernel();
 }
 
 void _init_array(int with_file)
