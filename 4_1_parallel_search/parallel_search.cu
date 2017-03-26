@@ -158,6 +158,7 @@ __global__ void search(number * X, int n, number target, int * c, int * q, int n
 // main
 int main(int argc, char * argv[]) 
 {
+	setbuf(stdout, NULL);
 	_init(argc, argv);
 
 	if(verbose)
@@ -189,7 +190,7 @@ int main(int argc, char * argv[])
 	d->Dg = {num_blocks, 1, 1};
 	d->Db = {threads_per_block, 1, 1};
 	gstart();
-	search<<<d->Dg, d->Db>>>(dev_X, X_len, target, c, q, num_threads, dev_ret);
+	//search<<<d->Dg, d->Db>>>(dev_X, X_len, target, c, q, num_threads, dev_ret);
 	gend(&gputime);
 	printf("gputime : %f ms\n", gputime);
 	gerror(cudaGetLastError());
