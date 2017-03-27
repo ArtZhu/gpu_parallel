@@ -1,0 +1,9 @@
+
+
+rank( B : A ) in O( log log m ) time
+
+using O( (n+m) * log log m ) operations
+
+still non-optimal;
+
+
