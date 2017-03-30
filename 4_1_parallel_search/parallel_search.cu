@@ -34,6 +34,7 @@ __device__ int r;
 // r
 // n is the number of elements
 __global__ void search(number * X, int n, number target, int * c, int * q, int num_threads, int * dev_ret){
+
 	int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
 	tid += 1; // so that idx starts from 1
@@ -54,9 +55,9 @@ __global__ void search(number * X, int n, number target, int * c, int * q, int n
 
 #ifdef PRETTY_PRINT
 	if(tid == 1){
-		//for(int i=0; i<n+2; i++) printf("%d ", X[i]); 
-		//printf("\n");
-		//printf("| q0 | q1 | q2 | q3 | c0 | c1 | c2 | c3 | l  | r  |\n");
+		for(int i=0; i<n+2; i++) printf("%d ", X[i]); 
+		printf("\n");
+		printf("| q0 | q1 | q2 | q3 | c0 | c1 | c2 | c3 | l  | r  |\n");
 		printf("%d %d\n", r, l);
 	}
 #endif
@@ -190,7 +191,7 @@ int main(int argc, char * argv[])
 	d->Dg = {num_blocks, 1, 1};
 	d->Db = {threads_per_block, 1, 1};
 	gstart();
-	//search<<<d->Dg, d->Db>>>(dev_X, X_len, target, c, q, num_threads, dev_ret);
+	search<<<d->Dg, d->Db>>>(dev_X, X_len, target, c, q, num_threads, dev_ret);
 	gend(&gputime);
 	printf("gputime : %f ms\n", gputime);
 	gerror(cudaGetLastError());

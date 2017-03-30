@@ -50,12 +50,12 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
 //	GPU warmup
 //------------------------------------------------------------------------
 
-static __global__ void hello(){ 
-	if(threadIdx.x == 0 && blockIdx.x == 0) printf("kernel warmup ...\n"); 
-	int x=0; 
-	for (int j=0; j<100; j++) x+=j;
+static __global__ void hello(){int x = 1; x++;}
+inline void prep_kernel()
+{
+	hello<<<1, 1>>>();
 }
-inline void prep_kernel(){ hello<<<10, 10>>>(); }
+
 
 //------------------------------------------------------------------------
 //	Timer

@@ -37,3 +37,22 @@
 //			 rank(b_k : A) = j[i] + rank(b_k : A_i)
 // end
 ///
+
+
+#include "ranking_sorted_sequences.h"
+
+int main(){
+	int n = 8;
+	number A[] = {-5, 0, 3, 4, 17, 18, 24, 28};
+	int m = 4;
+	number B[] = {1, 2, 15, 21};
+	number ret[m];
+
+	cpu_ranking(A, n, B, ret, m);
+
+	printf("\n CPU RANKING : [ ");
+	for(int i=0; i<m; i++)
+		printf("%d ", ret[i]);
+	printf("]\n");
+
+}

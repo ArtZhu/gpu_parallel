@@ -14,7 +14,8 @@
 #include "timer_headers/timer.h"
 #include "utilc.h"
 
-#endif
+template <typename T>
+void dbg_array(const char * tag, T * ptr, const char * FMT, int len);
 
 		/* function prototype */
 		/* UTIL */
@@ -70,8 +71,27 @@ void gtime(float * gputime, cudaError_t (*cuda)(Arguments...), Arguments... args
 template <typename... Arguments>
 void gtime(float * gputime, void (*kernel)(Arguments...), exec_dim_t * d, Arguments... args);
 
+
+
+
+
 #endif
 
 		/* function imp */
 // see included files
 
+//------------------------------------------------------------------------
+//	Printer
+//------------------------------------------------------------------------
+template <typename T>
+inline void dbg_array(const char * tag, T * ptr, const char * FMT, int len){
+	printf("%s : [ ", tag);
+	char fmt[strlen(FMT)+1];
+	sprintf(fmt, "%s ", FMT);
+	for(int iiiii=0; iiiii<len; iiiii++){
+		printf(fmt , ptr[iiiii]);
+	}
+	printf("]\n");
+}
+
+#endif

@@ -8,7 +8,8 @@
 #ifndef CPU_SEARCH_H
 #define CPU_SEARCH_H
 
-#include "parallel_search.h"
+//#include "parallel_search.h"
+#include "ranking_sorted_sequences.h"
 
 int cpu_search(number * X, int n, number target)
 {

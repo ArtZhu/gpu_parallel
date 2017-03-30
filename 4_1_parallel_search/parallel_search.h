@@ -32,7 +32,7 @@ unsigned int num_threads;
 	unsigned int q_size;
 
 // GPU
-__device__ number * dev_X;
+number * dev_X;
 
 void _init(int argc, char ** argv);
 void _init_array(int with_file);
