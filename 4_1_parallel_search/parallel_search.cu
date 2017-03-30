@@ -32,10 +32,11 @@ __device__ int l;
 // l										
 __device__ int r;
 // r
+__device__ int iter = 0;
 // n is the number of elements
 __global__ void search(number * X, int n, number target, int * c, int * q, int num_threads, int * dev_ret){
 
-	int tid = threadIdx.x;
+	int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
 	tid += 1; // so that idx starts from 1
 
@@ -47,7 +48,7 @@ __global__ void search(number * X, int n, number target, int * c, int * q, int n
 	//if(tid > n) return; // safety
 
 	//1.
-	if(tid == 1){
+	if(tid == 1 && iter == 0){
 		l = 0;
 		r = n + 1;
 		X[0] = INT_MIN;
@@ -57,6 +58,9 @@ __global__ void search(number * X, int n, number target, int * c, int * q, int n
 
 		*dev_ret = -1; // for thread termination purpose
 	}
+
+	if(tid == 1)
+		iter++;
 
 #ifdef PRETTY_PRINT
 	if(tid == 1){
@@ -75,108 +79,112 @@ __global__ void search(number * X, int n, number target, int * c, int * q, int n
 
 	//2.
 
-	while(r - l > num_threads){
+	// if statement below as replacement
+	//while(r - l > num_threads){
+	int set_ret = (r - l <= num_threads);
 
-		if(tid == 1){
-			q[0] = l;
-			q[num_threads + 1] = r;
-		}
-
-		q[tid] = l + tid * ((r - l) / (num_threads + 1));
-
-		//sync -- use r, l, p, tid, num_threads;
-		//		 -- set q
-		__syncthreads();
-
-		if(target == X[q[tid]]){
-			*dev_ret = q[tid] - 1; // so that ret idx starts from 0
-			// can i return here???
-			// no
-			//return;
-		}
-		else{
-			if(target > X[q[tid]])
-				c[tid] = 0;
-			else 
-				c[tid] = 1;
-		}
-
-		//sync -- use X, q, target, tid
-		//     -- set dev_ret, c
-		__syncthreads();
-
-		// if ret has been set, return, a replacement for the "return" in the conditional statement;
-		if(*dev_ret >= 0){
-#ifdef PRETTY_PRINT
-			if(tid == 1)
-				printf("dev ret0 : %d\n", *dev_ret);
-#endif
-			return;
-		}
-
-
-		if(c[tid] < c[tid + 1]){
-			l = q[tid];
-			r = q[tid + 1];
-			printf("tid : %d setting r, l to be %d %d\n", tid, r, l);
-		}
-
-		//sync -- use dev_ret, q, c, tid
-		//		 -- set l, r
-		__syncthreads();
-
-
-		if(tid == 1 && c[0] < c[1]){
-			l = q[0];
-			r = q[1];
-		}
-
-		//sync -- use dev_ret, q, c, tid
-		//		 -- set l, r
-		__syncthreads();
-
-
-#ifdef PRETTY_PRINT
-		if(tid == 1){
-			printf("r : %d ; l : %d\n", r, l);
-			printf("c[%d] = %d, c[%d] = %d, c[%d] = %d\n", 1023, c[1023], 1024, c[1024], 1025, c[1025]);
-			//printf("|%4d|%4d|%4d|%4d|%4d|%4d|%4d|%4d|%4d|%4d|\n", q[0], q[1], q[2], q[3], c[0], c[1], c[2], c[3], l, r);
-		}
-#endif
-
+	if(tid == 1){
+		q[0] = l;
+		q[num_threads + 1] = r;
 	}
 
-	if(tid > r - l){ 
-		//corresponds with the next syncthreads();
-		__syncthreads();
-		return;
-	}
+	q[tid] = l + tid * ((r - l) / (num_threads + 1));
 
-	if(target == X[l+tid]){
-		*dev_ret = l + tid - 1; // so that ret idx starts from 0
-	}
-	else if(target > X[l+tid]){
-		c[tid] = 0;
-	}
-	else{
-		c[tid] = 1;
-	}
-
-	// sync -- use l, X, tid, target
-	//			-- set dev_ret, c
+	//sync -- use r, l, p, tid, num_threads;
+	//		 -- set q
 	__syncthreads();
 
-#ifdef PRETTY_PRINT
-	printf("dev ret1 : %d\n", *dev_ret);
-#endif
-	if(*dev_ret >= 0)
-		return;
+	if(target == X[q[tid]]){
+		*dev_ret = q[tid] - 1; // so that ret idx starts from 0
+		// can i return here???
+		// no
+		//return;
+	}
+	else{
+		if(target > X[q[tid]])
+			c[tid] = 0;
+		else 
+			c[tid] = 1;
+	}
 
-	if(c[tid-1] < c[tid])
-		*dev_ret = l + tid - 1 - 1; // so that ret idx starts from 0
+	//sync -- use X, q, target, tid
+	//     -- set dev_ret, c
+	__syncthreads();
+
+	// if ret has been set, return, a replacement for the "return" in the conditional statement;
+	if(*dev_ret >= 0){
 #ifdef PRETTY_PRINT
-	printf("dev ret2 : %d\n", *dev_ret);
+		if(tid == 1)
+			printf("dev ret0 : %d\n", *dev_ret);
 #endif
+		return;
+	}
+
+
+	if(c[tid] < c[tid + 1]){
+		l = q[tid];
+		r = q[tid + 1];
+		printf("tid : %d setting r, l to be %d %d\n", tid, r, l);
+	}
+
+	//sync -- use dev_ret, q, c, tid
+	//		 -- set l, r
+	__syncthreads();
+
+
+	if(tid == 1 && c[0] < c[1]){
+		l = q[0];
+		r = q[1];
+	}
+
+	//sync -- use dev_ret, q, c, tid
+	//		 -- set l, r
+	__syncthreads();
+
+
+#ifdef PRETTY_PRINT
+	if(tid == 1){
+		printf("r : %d ; l : %d\n", r, l);
+		printf("c[%d] = %d, c[%d] = %d, c[%d] = %d\n", 1023, c[1023], 1024, c[1024], 1025, c[1025]);
+		//printf("|%4d|%4d|%4d|%4d|%4d|%4d|%4d|%4d|%4d|%4d|\n", q[0], q[1], q[2], q[3], c[0], c[1], c[2], c[3], l, r);
+	}
+#endif
+
+	//} //while(r - l > num_threads){
+		if(set_ret){
+
+			if(tid > r - l){ 
+				//corresponds with the next syncthreads();
+				__syncthreads();
+				return;
+			}
+
+			if(target == X[l+tid]){
+				*dev_ret = l + tid - 1; // so that ret idx starts from 0
+			}
+			else if(target > X[l+tid]){
+				c[tid] = 0;
+			}
+			else{
+				c[tid] = 1;
+			}
+
+			// sync -- use l, X, tid, target
+			//			-- set dev_ret, c
+			__syncthreads();
+
+#ifdef PRETTY_PRINT
+			printf("dev ret1 : %d\n", *dev_ret);
+#endif
+			if(*dev_ret >= 0)
+				return;
+
+			if(c[tid-1] < c[tid])
+				*dev_ret = l + tid - 1 - 1; // so that ret idx starts from 0
+#ifdef PRETTY_PRINT
+			printf("dev ret2 : %d\n", *dev_ret);
+#endif
+		}
 }
 
 // main
@@ -214,13 +222,16 @@ int main(int argc, char * argv[])
 	d->Dg = {num_blocks, 1, 1};
 	d->Db = {threads_per_block, 1, 1};
 	gstart();
-	search<<<d->Dg, d->Db>>>(dev_X, X_len, target, c, q, num_threads, dev_ret);
+	do{
+		search<<<d->Dg, d->Db>>>(dev_X, X_len, target, c, q, num_threads, dev_ret);
+		gerror(cudaMemcpy(&ret_idx, dev_ret, sizeof(int), cudaMemcpyDeviceToHost));
+	}while(ret_idx < 0);
 	gend(&gputime);
 	printf("gputime : %f ms\n", gputime);
 	gerror(cudaGetLastError());
 	gerror( cudaDeviceSynchronize() );
 
-	gerror(cudaMemcpy(&ret_idx, dev_ret, sizeof(int), cudaMemcpyDeviceToHost));
+	//gerror(cudaMemcpy(&ret_idx, dev_ret, sizeof(int), cudaMemcpyDeviceToHost));
 	printf("device idx = %d;\n", ret_idx);
 
 	ret_idx = 10086;
@@ -236,7 +247,7 @@ int main(int argc, char * argv[])
 	gerror(cudaFree(q));
 	gerror(cudaFree(dev_ret));
 	free(host_X);
-}
+}// main
 
 char fname[80];
 void _init(int argc, char ** argv)
