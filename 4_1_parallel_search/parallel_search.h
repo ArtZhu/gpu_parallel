@@ -34,6 +34,34 @@ unsigned int num_threads;
 // GPU
 number * dev_X;
 
+
+/* host gpu search function */
+inline void gpu_search();
+
+// IMP FLAGS
+__device__ int iter = 0;
+__device__ int dev_ret = 0;
+__device__ int dev_ret_flag = 0;
+//int * dev_flag_ptr, * dev_ret_ptr;
+int ret_idx;
+int host_ret_flag = 0;
+
+// step 1.
+			//set the variables
+			// just launch 1 thread for this
+__global__ void init_search(number * X, int n, int * c, int num_threads);
+// step 2. first half
+			//compute q, use q to compute c, might set dev_ret 
+__global__ void compute(number * X, number target, int * c, int * q, int num_threads, int * dev_ret);
+// step 2. second half
+			// use c, q, set l, r
+__global__ void set_bounds(int * c, int * q, int num_threads);
+// step 3. first half
+__global__ void set_ret1(number * X, number target, int * c, int * q, int num_threads);
+// step 3. second half
+__global__ void set_ret2(int * c, int num_threads);
+
+// INIT
 void _init(int argc, char ** argv);
 void _init_array(int with_file);
 
