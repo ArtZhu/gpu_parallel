@@ -12,7 +12,7 @@ this program is an implementation of the parallel search algorithm
 
 	p146 - ISBN 9-789201-548563
 
-# 4_2_parallel_search
+# 4_2_ranking_a_sorted_sequence_in_another_sorted_sequence
 author : Tiane Zhu
 
 this program is an implementation of the ranking sorted sequences
@@ -23,7 +23,7 @@ this program is an implementation of the ranking sorted sequences
 
 	p150 - ISBN 9-789201-548563
 
-# 4_4_parallel_search
+# 4_4_pipelined_merge_sort
 author : Tiane Zhu
 
 this program is an implementation of the pipelined merge sort algorithm
@@ -34,7 +34,7 @@ this program is an implementation of the pipelined merge sort algorithm
 
 	p163 - ISBN 9-789201-548563
 
-# 4_5_parallel_search
+# 4_5_bitonic_merge_sort
 author : Tiane Zhu
 
 this program is an implementation of the parallel search algorithm
