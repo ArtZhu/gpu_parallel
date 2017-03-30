@@ -35,7 +35,8 @@ __device__ int r;
 // n is the number of elements
 __global__ void search(number * X, int n, number target, int * c, int * q, int num_threads, int * dev_ret){
 
-	int tid = threadIdx.x;
+
+	int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
 	tid += 1; // so that idx starts from 1
 
