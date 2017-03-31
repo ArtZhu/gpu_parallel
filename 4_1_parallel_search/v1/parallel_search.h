@@ -9,7 +9,7 @@
 #define PARALLEL_SEARCH_H
 
 #include <stdio.h>
-#include "../gpu_utils/util.h"
+#include "../../gpu_utils/util.h"
 
 int verbose = 0;
 

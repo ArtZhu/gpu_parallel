@@ -1,3 +1,6 @@
 1. __syncthreads(); block-wise
 2. multiple iterations, kernel launch with cudaMemcpy checking termination
 3. two kernels each iteration setting c and reading c;
+4. two kernels at step 3
+
+5. tried to refactor the v1 program
