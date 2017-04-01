@@ -15,7 +15,7 @@
 
 // rank(B : A)
 // ret must be allocated already
-void cpu_ranking(number * A, int n, number * B, number * ret, int m){
+void cpu_ranking(number * A, int n, number * B, int * ret, int m){
 
 #ifdef CPU_PRETTY_PRINT
 		printf("A length : %d, B length : %d\n", n, m);

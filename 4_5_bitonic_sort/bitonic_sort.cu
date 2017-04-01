@@ -8,3 +8,15 @@
  *		p146 - ISBN 9-789201-548563
  */
 
+
+////
+// Input:
+//		Bitonic Sequence X = (x0, ... , x_{n-1});
+//
+////
+// Output:
+//		X sorted
+//
+////
+
+

@@ -14,7 +14,7 @@ int cpu_search(number * X, int n, number target)
 {
 	int idx, s;
 	
-	idx = (n - 1)/2;
+	idx = n/2;
 	s = n/4;
 
 	while(s >= 1){
@@ -26,17 +26,7 @@ int cpu_search(number * X, int n, number target)
 			idx += s;
 		}
 
-		//printf("idx = %d; X[idx] = %d; %d %d\n", idx, X[idx], X[idx-s], X[idx+s]);
-
 		s = s/2;
-	}
-
-	//for n not perfect power of 2
-	while(X[idx] > target){
-		idx--;
-	}
-	while(X[idx+1] <= target){
-		idx++;
 	}
 
 	return idx;
