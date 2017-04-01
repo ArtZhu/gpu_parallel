@@ -36,7 +36,7 @@
 //			 Let i = floor( k / sqm )
 //			 rank(b_k : A) = j[i] + rank(b_k : A_i)
 // end
-///
+////
 
 
 #include "ranking_sorted_sequences.h"
