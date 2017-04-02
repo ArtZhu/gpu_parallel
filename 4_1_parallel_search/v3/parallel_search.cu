@@ -34,13 +34,13 @@ volatile __device__ int r;
 // r
 // n is the number of elements
 // this function needs iter_flag to be initialized to -1
-__global__ void search(number * X, int n, number target, int * c, int * q, int num_threads, int * dev_ret){
+__global__ void search(number * X, int n, number target, volatile int * c, volatile int * q, int num_threads, int * dev_ret){
 	int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
 	// ATOMIC
 	// for comparison and conditionally setting global iter flag.
 	int local_iter = 0;
-	uint8_t * mutex = half_iter_signals + idx;
+	int * mutex = half_iter_signals + tid;
 
 	tid += 1; // so that idx starts from 1
 
@@ -237,10 +237,10 @@ int main(int argc, char * argv[])
 	err_code[1] = cudaMalloc( &c , c_size );
 	err_code[2] = cudaMalloc( &q , q_size );
 	err_code[3] = cudaMalloc( &dev_ret , sizeof(int) );
-	err_code[4] = cudaMalloc( &host_half_iter_signals_ptr, (size_t) (num_threads) );
+	err_code[4] = cudaMalloc( &host_half_iter_signals_ptr, num_threads * sizeof(int));
 	for(int i=0; i<5; i++){ gerror(err_code[i]); }
 
-	cudaMemcpyToSymbol(&half_iter_signals, &host_half_iter_signals_ptr, sizeof(uint8_t *), 0, cudaMemcpyHostToDevice);
+	cudaMemcpyToSymbol(&half_iter_signals, &host_half_iter_signals_ptr, sizeof(int *), 0, cudaMemcpyHostToDevice);
 	ret_idx = -1;
 	cudaMemcpyToSymbol(&iter_flag, &ret_idx, sizeof(int), 0, cudaMemcpyHostToDevice);
 	
@@ -259,7 +259,7 @@ int main(int argc, char * argv[])
 	search<<<d->Dg, d->Db>>>(dev_X, X_len, target, c, q, num_threads, dev_ret);
 	gend(&gputime);
 	printf("gputime : %f ms\n", gputime);
-	gerror(cudaGetLastError());
+	gerror( cudaGetLastError());
 	gerror( cudaDeviceSynchronize() );
 
 	gerror(cudaMemcpy(&ret_idx, dev_ret, sizeof(int), cudaMemcpyDeviceToHost));
@@ -274,8 +274,8 @@ int main(int argc, char * argv[])
 	printf("host idx = %d;\n", ret_idx);
 
 	gerror(cudaFree(dev_X));
-	gerror(cudaFree(c));
-	gerror(cudaFree(q));
+	gerror(cudaFree((void *) c));
+	gerror(cudaFree((void *) q));
 	gerror(cudaFree(host_half_iter_signals_ptr));
 	gerror(cudaFree(dev_ret));
 	free(host_X);
