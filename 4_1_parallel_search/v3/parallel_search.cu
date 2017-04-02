@@ -42,6 +42,9 @@ __global__ void search(number * X, int n, number target, volatile int * c, volat
 	int local_iter = 0;
 	int * mutex = half_iter_signals + tid;
 
+	if(tid == 0)
+		printf("%p, %p\n", half_iter_signals, mutex);
+
 	tid += 1; // so that idx starts from 1
 
 	if(tid > n) return; // safety
@@ -56,9 +59,15 @@ __global__ void search(number * X, int n, number target, volatile int * c, volat
 		c[0] = 0;
 		c[num_threads + 1] = 1;
 
+
 		*dev_ret = -1; // for thread termination purpose
+		//init iter_flag
 		atomicExch(&iter_flag, 0);
+
 	}
+
+	//init signals
+	atomicExch(mutex, 0);
 
 #ifdef PRETTY_PRINT
 	if(tid == 1){
@@ -75,12 +84,18 @@ __global__ void search(number * X, int n, number target, volatile int * c, volat
 	//2.
 	while(atomicCAS(&iter_flag, 0, 0) != 0); // second arg doesn't matter here
 
-	while(r - l > num_threads){
+	if(tid == 2)
+		printf("4\n");
+	
+	//while(r - l > num_threads){
 
 		if(tid == 1){
 			q[0] = l;
 			q[num_threads + 1] = r;
 		}
+
+	if(tid == 2)
+		printf("5\n");
 
 		q[tid] = l + tid * ((r - l) / (num_threads + 1));
 
@@ -102,41 +117,53 @@ __global__ void search(number * X, int n, number target, volatile int * c, volat
 				c[tid] = 1;
 		}
 
+	if(tid == 2)
+		printf("6\n");
+
 		//sync -- use X, q, target
 		//     -- set l, r, c
 		//__syncthreads();
-		__threadfence();
+		//__threadfence();
 
 		// if ret has been set, return, a replacement for the "return" in the conditional statement;
-		/* put this in the end, and use atomic flag = iteration 
-				atomic flag signal end of while iteration.
-		      it also signals l, r has been set and then check this */
-		/* problematic */
-		/*
-		if(*dev_ret >= 0){
-#ifdef PRETTY_PRINT
-			if(tid == 1)
-				printf("dev ret0 : %d\n", *dev_ret);
-#endif
-			return;
-		}
-		*/
+		// put this in the end, and use atomic flag = iteration 
+		//		atomic flag signal end of while iteration.
+		//     it also signals l, r has been set and then check this 
+		// problematic
+		//if(*dev_ret >= 0){
+//#ifdef PRETTY_PRINT
+//			if(tid == 1)
+//				printf("dev ret0 : %d\n", *dev_ret);
+//#endif
+//			return;
+		//}
 
 		
 		//mark
 		__threadfence();
 		//guarantees, tid-1 read the value already.
+	
+	if(tid == 2)
+		printf("7\n");
+
 		if(tid != 1)
 			while(atomicCAS(mutex, 0, 1) != 0);
+
+		__threadfence();
+
+	if(tid == 2)
+		printf("8\n");
 
 		//guarantees, tid+1 set the value already
 		if(tid != n)
 			while(atomicCAS(mutex + 1, 1, 0) != 1);
+	/*
+
 
 		// whoever sets l,r  should let other threads know that 
 		//			next iteration is ready.
-		/* above this, thread no race condition */
-		/* problematic part */
+		// above this, thread no race condition
+		// problematic part 
 		if(c[tid] < c[tid + 1]){
 			l = q[tid];
 			r = q[tid + 1];
@@ -209,17 +236,20 @@ __global__ void search(number * X, int n, number target, volatile int * c, volat
 		return;
 
 
-	/* problematic part */
+	// problematic part
 	if(c[tid-1] < c[tid])
 		atomicCAS(dev_ret, -1, l + tid - 1 - 1); // so that ret idx starts from 0
 #ifdef PRETTY_PRINT
 	printf("dev ret2 : %d\n", *dev_ret);
 #endif
+	*/
 }
 
 // main
 int main(int argc, char * argv[]) 
 {
+	setbuf(stdout, NULL);
+
 	_init(argc, argv);
 
 	if(verbose)
@@ -233,16 +263,25 @@ int main(int argc, char * argv[])
 	cudaDeviceReset();
 
 	// X_len + 2 for the algorithm element at idx 0 and n + 1 (originally 1, 2, ..., n)
-	err_code[0] = cudaMalloc( &dev_X , X_size );
-	err_code[1] = cudaMalloc( &c , c_size );
-	err_code[2] = cudaMalloc( &q , q_size );
-	err_code[3] = cudaMalloc( &dev_ret , sizeof(int) );
-	err_code[4] = cudaMalloc( &host_half_iter_signals_ptr, num_threads * sizeof(int));
-	for(int i=0; i<5; i++){ gerror(err_code[i]); }
+	gerror(cudaMalloc( &dev_X , X_size ));
+	gerror(cudaMalloc( &c , c_size ));
+	gerror(cudaMalloc( &q , q_size ));
+	gerror(cudaMalloc( &dev_ret , sizeof(int) ));
+	gerror(cudaMalloc( &host_half_iter_signals_ptr, num_threads * sizeof(int)));
+	//gerror(err_code[4] = cudaMalloc( &half_iter_signals, num_threads * sizeof(int)));
+	//err_code[4] = cudaMalloc( &half_iter_signals, num_threads * sizeof(int));
 
-	cudaMemcpyToSymbol(&half_iter_signals, &host_half_iter_signals_ptr, sizeof(int *), 0, cudaMemcpyHostToDevice);
+	printf("1\n");
+
+	gerror(cudaMemcpyToSymbol(half_iter_signals, &host_half_iter_signals_ptr, sizeof(int *), 0, cudaMemcpyHostToDevice));
+
+	printf("2\n");
+	//use it as a tmp var
 	ret_idx = -1;
-	cudaMemcpyToSymbol(&iter_flag, &ret_idx, sizeof(int), 0, cudaMemcpyHostToDevice);
+
+	gerror(cudaMemcpyToSymbol(iter_flag, &ret_idx, sizeof(int), 0, cudaMemcpyHostToDevice));
+
+	printf("3\n");
 	
 	gerror(cudaMemcpy(dev_X, host_X, X_size, cudaMemcpyHostToDevice));
 
