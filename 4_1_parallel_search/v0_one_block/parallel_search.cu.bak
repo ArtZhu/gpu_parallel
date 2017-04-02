@@ -24,30 +24,30 @@
 ///////////////////////////////////////////////////////////
 /* kernel strictly following algorithm */
 // additional inputs
-volatile int * c;
+int * c;
 // c										-- c array from 0 to p+1
-volatile int * q;
+int * q;
 // q										-- q array from 0 to p+1
-volatile __device__ int l;
+__device__ int l;
 // l										
-volatile __device__ int r;
+__device__ int r;
 // r
 // n is the number of elements
-// this function needs iter_flag to be initialized to -1
 __global__ void search(number * X, int n, number target, int * c, int * q, int num_threads, int * dev_ret){
-	int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
-	// ATOMIC
-	// for comparison and conditionally setting global iter flag.
-	int local_iter = 0;
-	uint8_t * mutex = half_iter_signals + idx;
+
+	int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
 	tid += 1; // so that idx starts from 1
 
-	if(tid > n) return; // safety
+#ifdef PRETTY_PRINT
+	if(tid == 1)
+		printf("KERNEL : \narray length : %d, target : %d, num_threads : %d\n", n, target, num_threads);
+#endif
+
+	//if(tid > n) return; // safety
 
 	//1.
-	// come back and add the first atomic flag here.
 	if(tid == 1){
 		l = 0;
 		r = n + 1;
@@ -57,23 +57,24 @@ __global__ void search(number * X, int n, number target, int * c, int * q, int n
 		c[num_threads + 1] = 1;
 
 		*dev_ret = -1; // for thread termination purpose
-		atomicExch(&iter_flag, 0);
 	}
 
 #ifdef PRETTY_PRINT
 	if(tid == 1){
-		//for(int i=0; i<n+2; i++) printf("%d ", X[i]); 
+		if(n <= 32){
+			for(int i=0; i<n+2; i++) printf("%d ", X[i]); 
+		}
 		//printf("\n");
 		//printf("| q0 | q1 | q2 | q3 | c0 | c1 | c2 | c3 | l  | r  |\n");
-		printf("%d %d\n", r, l);
+		printf("1. r : %d ; l : %d\n", r, l);
 	}
 #endif
 
-	//sync
-	//__syncthreads();
+	//sync -- 
+	//		 -- set r, l, X, c, dev_ret, tid
+	__syncthreads();
 
 	//2.
-	while(atomicCAS(&iter_flag, 0, 0) != 0); // second arg doesn't matter here
 
 	while(r - l > num_threads){
 
@@ -84,10 +85,9 @@ __global__ void search(number * X, int n, number target, int * c, int * q, int n
 
 		q[tid] = l + tid * ((r - l) / (num_threads + 1));
 
-		//sync -- use r, l, p;
+		//sync -- use r, l, p, tid, num_threads;
 		//		 -- set q
-		//__syncthreads();
-		//__threadfence();
+		__syncthreads();
 
 		if(target == X[q[tid]]){
 			*dev_ret = q[tid] - 1; // so that ret idx starts from 0
@@ -102,17 +102,11 @@ __global__ void search(number * X, int n, number target, int * c, int * q, int n
 				c[tid] = 1;
 		}
 
-		//sync -- use X, q, target
-		//     -- set l, r, c
-		//__syncthreads();
-		__threadfence();
+		//sync -- use X, q, target, tid
+		//     -- set dev_ret, c
+		__syncthreads();
 
 		// if ret has been set, return, a replacement for the "return" in the conditional statement;
-		/* put this in the end, and use atomic flag = iteration 
-				atomic flag signal end of while iteration.
-		      it also signals l, r has been set and then check this */
-		/* problematic */
-		/*
 		if(*dev_ret >= 0){
 #ifdef PRETTY_PRINT
 			if(tid == 1)
@@ -120,71 +114,47 @@ __global__ void search(number * X, int n, number target, int * c, int * q, int n
 #endif
 			return;
 		}
-		*/
 
-		
-		//mark
-		__threadfence();
-		//guarantees, tid-1 read the value already.
-		if(tid != 1)
-			while(atomicCAS(mutex, 0, 1) != 0);
 
-		//guarantees, tid+1 set the value already
-		if(tid != n)
-			while(atomicCAS(mutex + 1, 1, 0) != 1);
-
-		// whoever sets l,r  should let other threads know that 
-		//			next iteration is ready.
-		/* above this, thread no race condition */
-		/* problematic part */
 		if(c[tid] < c[tid + 1]){
 			l = q[tid];
 			r = q[tid + 1];
-
-			__threadfence();
-			
-			atomicCAS(&iter_flag, local_iter, local_iter+1);
+			printf("tid : %d setting r, l to be %d %d\n", tid, r, l);
 		}
+
+		//sync -- use dev_ret, q, c, tid
+		//		 -- set l, r
+		__syncthreads();
+
 
 		if(tid == 1 && c[0] < c[1]){
 			l = q[0];
 			r = q[1];
-
-			__threadfence();
-			
-			atomicCAS(&iter_flag, local_iter, local_iter+1);
 		}
 
-		//sync -- use q, c, tid
+		//sync -- use dev_ret, q, c, tid
 		//		 -- set l, r
-		//__syncthreads();
+		__syncthreads();
 
-		++local_iter;
-		//*iter_flag ok here?
-		while(atomicCAS(&iter_flag, 0, local_iter) != local_iter); // second arg doesn't matter here
-
-		if(*dev_ret >= 0){
-#ifdef PRETTY_PRINT
-			if(tid == 1)
-				printf("dev ret0 : %d\n", *dev_ret);
-#endif
-			return;
-		}
 
 #ifdef PRETTY_PRINT
-		if(tid == 1)
-			printf("%d %d\n", r, l);
+		if(tid == 1){
+			printf("r : %d ; l : %d\n", r, l);
+			printf("c[%d] = %d, c[%d] = %d, c[%d] = %d\n", 1023, c[1023], 1024, c[1024], 1025, c[1025]);
 			//printf("|%4d|%4d|%4d|%4d|%4d|%4d|%4d|%4d|%4d|%4d|\n", q[0], q[1], q[2], q[3], c[0], c[1], c[2], c[3], l, r);
+		}
 #endif
 
 	}
 
-	
-	if(tid > r - l) return;
+	if(tid > r - l){ 
+		//corresponds with the next syncthreads();
+		__syncthreads();
+		return;
+	}
 
 	if(target == X[l+tid]){
-		//*dev_ret = l + tid - 1; // so that ret idx starts from 0
-		atomicCAS(dev_ret, -1, l + tid - 1);
+		*dev_ret = l + tid - 1; // so that ret idx starts from 0
 	}
 	else if(target > X[l+tid]){
 		c[tid] = 0;
@@ -193,14 +163,9 @@ __global__ void search(number * X, int n, number target, int * c, int * q, int n
 		c[tid] = 1;
 	}
 
-	//mark
-	__threadfence();
-	//set flag.
-	atomicExch(mutex, 1);
-
-	//guarantees, tid-1 set the flag already
-	if(tid != 1)
-		while(atomicCAS(mutex - 1, 1, 0) != 1);
+	// sync -- use l, X, tid, target
+	//			-- set dev_ret, c
+	__syncthreads();
 
 #ifdef PRETTY_PRINT
 	printf("dev ret1 : %d\n", *dev_ret);
@@ -208,10 +173,8 @@ __global__ void search(number * X, int n, number target, int * c, int * q, int n
 	if(*dev_ret >= 0)
 		return;
 
-
-	/* problematic part */
 	if(c[tid-1] < c[tid])
-		atomicCAS(dev_ret, -1, l + tid - 1 - 1); // so that ret idx starts from 0
+		*dev_ret = l + tid - 1 - 1; // so that ret idx starts from 0
 #ifdef PRETTY_PRINT
 	printf("dev ret2 : %d\n", *dev_ret);
 #endif
@@ -220,6 +183,7 @@ __global__ void search(number * X, int n, number target, int * c, int * q, int n
 // main
 int main(int argc, char * argv[]) 
 {
+	setbuf(stdout, NULL);
 	_init(argc, argv);
 
 	if(verbose)
@@ -237,13 +201,8 @@ int main(int argc, char * argv[])
 	err_code[1] = cudaMalloc( &c , c_size );
 	err_code[2] = cudaMalloc( &q , q_size );
 	err_code[3] = cudaMalloc( &dev_ret , sizeof(int) );
-	err_code[4] = cudaMalloc( &host_half_iter_signals_ptr, (size_t) (num_threads) );
-	for(int i=0; i<5; i++){ gerror(err_code[i]); }
+	for(int i=0; i<4; i++){ gerror(err_code[i]); }
 
-	cudaMemcpyToSymbol(&half_iter_signals, &host_half_iter_signals_ptr, sizeof(uint8_t *), 0, cudaMemcpyHostToDevice);
-	ret_idx = -1;
-	cudaMemcpyToSymbol(&iter_flag, &ret_idx, sizeof(int), 0, cudaMemcpyHostToDevice);
-	
 	gerror(cudaMemcpy(dev_X, host_X, X_size, cudaMemcpyHostToDevice));
 
 	unsigned int num_blocks = (1023 + num_threads) / 1024;
@@ -276,7 +235,6 @@ int main(int argc, char * argv[])
 	gerror(cudaFree(dev_X));
 	gerror(cudaFree(c));
 	gerror(cudaFree(q));
-	gerror(cudaFree(host_half_iter_signals_ptr));
 	gerror(cudaFree(dev_ret));
 	free(host_X);
 }

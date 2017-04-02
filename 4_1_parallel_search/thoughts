@@ -1,0 +1,5 @@
+use tid = 1 to operate on q[n], c[n];
+
+texture memory,
+
+since tid = 1 is first -> no race?

@@ -9,6 +9,7 @@
 #define PARALLEL_SEARCH_H
 
 #include <stdio.h>
+#include <inttypes.h>
 #include "../gpu_utils/util.h"
 
 int verbose = 0;
@@ -36,6 +37,13 @@ __device__ number * dev_X;
 
 void _init(int argc, char ** argv);
 void _init_array(int with_file);
+
+/* ATOMIC FLAGS */
+// implementation here uses a byte for each flag : signaling completion for setting q and c
+//			and an int for the number of iterations set by the thread setting r and l.
+__device__ int iter_flag;
+__device__ uint8_t * half_iter_signals;
+uint8_t * host_half_iter_signals_ptr;
 
 #include "cpu_search.h"
 
