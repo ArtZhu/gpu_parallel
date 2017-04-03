@@ -84,18 +84,14 @@ __global__ void search(number * X, int n, number target, volatile int * c, volat
 	//2.
 	while(atomicCAS(&iter_flag, 0, 0) != 0); // second arg doesn't matter here
 
-	if(tid == 2)
-		printf("4\n");
 	
-	//while(r - l > num_threads){
+	while(r - l > num_threads){
 
 		if(tid == 1){
 			q[0] = l;
 			q[num_threads + 1] = r;
 		}
 
-	if(tid == 2)
-		printf("5\n");
 
 		q[tid] = l + tid * ((r - l) / (num_threads + 1));
 
@@ -117,8 +113,6 @@ __global__ void search(number * X, int n, number target, volatile int * c, volat
 				c[tid] = 1;
 		}
 
-	if(tid == 2)
-		printf("6\n");
 
 		//sync -- use X, q, target
 		//     -- set l, r, c
@@ -131,33 +125,27 @@ __global__ void search(number * X, int n, number target, volatile int * c, volat
 		//     it also signals l, r has been set and then check this 
 		// problematic
 		//if(*dev_ret >= 0){
-//#ifdef PRETTY_PRINT
-//			if(tid == 1)
-//				printf("dev ret0 : %d\n", *dev_ret);
-//#endif
-//			return;
+		//#ifdef PRETTY_PRINT
+		//			if(tid == 1)
+		//				printf("dev ret0 : %d\n", *dev_ret);
+		//#endif
+		//			return;
 		//}
 
-		
+
 		//mark
 		__threadfence();
 		//guarantees, tid-1 read the value already.
-	
-	if(tid == 2)
-		printf("7\n");
+
 
 		if(tid != 1)
 			while(atomicCAS(mutex, 0, 1) != 0);
 
 		__threadfence();
 
-	if(tid == 2)
-		printf("8\n");
-
 		//guarantees, tid+1 set the value already
-		if(tid != n)
+		if(tid != num_threads)
 			while(atomicCAS(mutex + 1, 1, 0) != 1);
-	/*
 
 
 		// whoever sets l,r  should let other threads know that 
@@ -169,7 +157,7 @@ __global__ void search(number * X, int n, number target, volatile int * c, volat
 			r = q[tid + 1];
 
 			__threadfence();
-			
+
 			atomicCAS(&iter_flag, local_iter, local_iter+1);
 		}
 
@@ -178,7 +166,7 @@ __global__ void search(number * X, int n, number target, volatile int * c, volat
 			r = q[1];
 
 			__threadfence();
-			
+
 			atomicCAS(&iter_flag, local_iter, local_iter+1);
 		}
 
@@ -201,7 +189,7 @@ __global__ void search(number * X, int n, number target, volatile int * c, volat
 #ifdef PRETTY_PRINT
 		if(tid == 1)
 			printf("%d %d\n", r, l);
-			//printf("|%4d|%4d|%4d|%4d|%4d|%4d|%4d|%4d|%4d|%4d|\n", q[0], q[1], q[2], q[3], c[0], c[1], c[2], c[3], l, r);
+		//printf("|%4d|%4d|%4d|%4d|%4d|%4d|%4d|%4d|%4d|%4d|\n", q[0], q[1], q[2], q[3], c[0], c[1], c[2], c[3], l, r);
 #endif
 
 	}
@@ -242,7 +230,6 @@ __global__ void search(number * X, int n, number target, volatile int * c, volat
 #ifdef PRETTY_PRINT
 	printf("dev ret2 : %d\n", *dev_ret);
 #endif
-	*/
 }
 
 // main
@@ -255,7 +242,6 @@ int main(int argc, char * argv[])
 	if(verbose)
 		printf("finding target : %d in array of length %d\n", target, X_len);
 
-	cudaError_t err_code[10];
 	float gputime, cputime;
 	int ret_idx, * dev_ret;
 	
@@ -268,21 +254,14 @@ int main(int argc, char * argv[])
 	gerror(cudaMalloc( &q , q_size ));
 	gerror(cudaMalloc( &dev_ret , sizeof(int) ));
 	gerror(cudaMalloc( &host_half_iter_signals_ptr, num_threads * sizeof(int)));
-	//gerror(err_code[4] = cudaMalloc( &half_iter_signals, num_threads * sizeof(int)));
-	//err_code[4] = cudaMalloc( &half_iter_signals, num_threads * sizeof(int));
-
-	printf("1\n");
 
 	gerror(cudaMemcpyToSymbol(half_iter_signals, &host_half_iter_signals_ptr, sizeof(int *), 0, cudaMemcpyHostToDevice));
 
-	printf("2\n");
 	//use it as a tmp var
 	ret_idx = -1;
 
 	gerror(cudaMemcpyToSymbol(iter_flag, &ret_idx, sizeof(int), 0, cudaMemcpyHostToDevice));
 
-	printf("3\n");
-	
 	gerror(cudaMemcpy(dev_X, host_X, X_size, cudaMemcpyHostToDevice));
 
 	unsigned int num_blocks = (1023 + num_threads) / 1024;
