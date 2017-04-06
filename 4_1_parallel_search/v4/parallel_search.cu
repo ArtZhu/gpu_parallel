@@ -50,11 +50,10 @@ __device__ void search(number * X, int n, number target, int * c, int * q, int n
 	if(tid > n) return; // safety
 
 	//1.
+  // initialize this part outside kernel
 	if(tid == 1){
 		*l = 0;
 		*r = n + 1;
-		X[0] = INT_MIN;
-		X[n + 1] = INT_MAX;
 		c[0] = 0;
 		c[num_threads + 1] = 1;
 
@@ -63,7 +62,7 @@ __device__ void search(number * X, int n, number target, int * c, int * q, int n
 
 #ifdef PRETTY_PRINT
 	if(tid == 1)
-		printf("%d %d\n", r, l);
+		printf("%d : %d %d\n", blockIdx.x, *l, *r);
 #endif
 
 	//sync
@@ -71,6 +70,7 @@ __device__ void search(number * X, int n, number target, int * c, int * q, int n
 
 	//2.
 
+	int count = 0;
 	while(*r - *l > num_threads){
 
 		if(tid == 1){
@@ -102,6 +102,10 @@ __device__ void search(number * X, int n, number target, int * c, int * q, int n
 		__syncthreads();
 		// if ret has been set, return, a replacement for the "return" in the conditional statement;
 		if(*dev_ret >= -1){
+#ifdef PRETTY_PRINT
+		if(tid == 1)
+			printf("%d : dev_ret0 %d\n", blockIdx.x, *dev_ret);
+#endif
 			return;
 		}
 
@@ -124,11 +128,15 @@ __device__ void search(number * X, int n, number target, int * c, int * q, int n
 
 #ifdef PRETTY_PRINT
 		if(tid == 1)
-			printf("%d %d\n", r, l);
+			printf("iter %d, block %d : %d %d\n", count++, blockIdx.x, *l, *r);
 #endif
 
 	}
 
+#ifdef PRETTY_PRINT
+		if(tid == 1)
+			printf("%d : dev_ret1 %d\n", blockIdx.x, *dev_ret);
+#endif
 	if(tid > *r - *l) return;
 
 	if(target == X[*l+tid]){
@@ -141,22 +149,31 @@ __device__ void search(number * X, int n, number target, int * c, int * q, int n
 		c[tid] = 1;
 	}
 
+#ifdef PRETTY_PRINT
+		if(tid == 1)
+			printf("%d : dev_ret2 %d\n", blockIdx.x, *dev_ret);
+#endif
 	if(*dev_ret >= -1)
 		return;
 
 	if(c[tid-1] < c[tid])
 		*dev_ret = *l + tid - 1 - 1; // so that ret idx starts from 0
 
+#ifdef PRETTY_PRINT
+		if(tid == 1)
+			printf("%d : dev_ret3 %d\n", blockIdx.x, *dev_ret);
+#endif
+
 }
 
 __device__ void fix(volatile int * dev_ret, int dev_ret_len, int n){
 	int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
-	while(dev_ret[tid] == -2) ;
+	//while(dev_ret[tid] == -2) ;
 
 	if(tid < dev_ret_len){
 		int idx = dev_ret[tid];
-		if(idx != n - 1 && idx != -1){
+		if(idx != -2 && idx != -1){
 			dev_ret[0] = idx + n * tid;
 		}
 	}
@@ -164,8 +181,32 @@ __device__ void fix(volatile int * dev_ret, int dev_ret_len, int n){
 
 __global__ void search_main(number * X, int n, number target, int * c, int * q, int num_threads, volatile int * dev_ret, int * l, int * r, int dev_ret_len)
 {
-	search(X, n, target, c, q, num_threads, dev_ret, l, r);
-	fix(dev_ret, dev_ret_len, n);
+	// doesn't work for non-pow 2
+	int tmp_n = n / dev_ret_len;
+
+	/*
+	if(threadIdx.x == 0){
+		printf("array length : %d\n", n);
+		printf("tmp_n : %d\n dev_ret_len = %d\n", tmp_n, dev_ret_len);
+	}
+	*/
+
+	num_threads = num_threads > 1024 ? 1024 : num_threads;
+
+	search(X, tmp_n, target, c, q, num_threads, dev_ret, l, r);
+
+	/*
+	if(blockIdx.x == 0 && threadIdx.x == 0){
+		printf("[ ");
+		for(int i=0; i<dev_ret_len; i++){
+			printf("%d ", dev_ret[i]);
+		}
+		printf("]\n");
+	}
+	*/
+
+	
+	fix(dev_ret, dev_ret_len, tmp_n);
 
 	__threadfence();
 
@@ -290,6 +331,8 @@ void _init_array(int with_file)
 {
 	host_X = (number *) malloc(X_size);
 
+	host_X[0] = INT_MIN;
+	host_X[X_len+1] = INT_MAX;
 	//not use file
 	if(!with_file){
 		for(number i=1; i<X_len+1; i++){
