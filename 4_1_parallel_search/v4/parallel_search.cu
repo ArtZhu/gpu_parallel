@@ -71,13 +71,11 @@ __global__ void search(number * X, int n, number target, volatile int * c, volat
 		printf("num threads: %d\n", num_threads);
 #endif
 
+		__threadfence();
+
 		atomicExch(&iter_flag, 0);
 	}
 
-
-	//sync
-	//__syncthreads();
-	__threadfence();
 
 	//2.
 	while(atomicCAS(&iter_flag, 0, 0) != 0); // second arg doesn't matter here
@@ -95,51 +93,18 @@ __global__ void search(number * X, int n, number target, volatile int * c, volat
 		}
 
 
-		q[tid] = l + tid * ((r - l) / (num_threads + 1));
+		int qtid = l + tid * ((r - l) / (num_threads + 1));
+		q[tid] = qtid;
 
-		//sync -- use r, l, p;
-		//		 -- set q
-		//__syncthreads();
-		__threadfence();
-
-		//if(tid == num_threads)
-		//printf("target : %d\nq[%d] = %d\n", target, tid, q[tid]);
-
-		//if(tid == 32294)
-		//printf("target : %d\nq[%d] = %d\n", target, tid, q[tid]);
-
-		if(target == X[q[tid]]){
-			*dev_ret = q[tid] - 1; // so that ret idx starts from 0
-			// can i return here???
-			// no
-			//return;
+		if(target == X[qtid]){
+			*dev_ret = qtid - 1; // so that ret idx starts from 0
 		}
 		else{
-			if(target > X[q[tid]])
+			if(target > X[qtid])
 				c[tid] = 0;
 			else 
 				c[tid] = 1;
 		}
-
-
-		//sync -- use X, q, target
-		//     -- set l, r, c
-		//__syncthreads();
-		//__threadfence();
-
-		// if ret has been set, return, a replacement for the "return" in the conditional statement;
-		// put this in the end, and use atomic flag = iteration 
-		//		atomic flag signal end of while iteration.
-		//     it also signals l, r has been set and then check this 
-		// problematic
-		//if(*dev_ret >= 0){
-		//#ifdef PRETTY_PRINT
-		//			if(tid == 1)
-		//				printf("dev ret0 : %d\n", *dev_ret);
-		//#endif
-		//			return;
-		//}
-
 
 		//mark
 		__threadfence();
@@ -147,8 +112,6 @@ __global__ void search(number * X, int n, number target, volatile int * c, volat
 
 		if(tid != 1)
 			while(atomicCAS(mutex, 0, 1) != 0);
-
-		__threadfence();
 
 		//guarantees, tid+1 set the value already
 		if(tid != num_threads)
@@ -178,40 +141,16 @@ __global__ void search(number * X, int n, number target, volatile int * c, volat
 			iter_inc = 1;
 		}
 
-		__threadfence();
-
 		atomicCAS(&iter_flag, local_iter, local_iter+iter_inc);
 
-
-		//sync -- use q, c, tid
-		//		 -- set l, r
-		//__syncthreads();
-
 		++local_iter;
-
-		__threadfence();
 
 		//*iter_flag ok here?
 		while(atomicCAS(&iter_flag, -1, local_iter) != local_iter); // second arg doesn't matter here
 
-		__threadfence();
-
-		if(*dev_ret >= 0){
-#ifdef PRETTY_PRINT
-			if(tid == 1)
-				printf("dev ret0 : %d\n", *dev_ret);
-#endif
+		if(*dev_ret >= 0)
 			return;
-		}
-
-		__threadfence();
-
-#ifdef PRETTY_PRINT
-		if(tid == 1)
-			printf("%d %d\n", r, l);
-		//printf("|%4d|%4d|%4d|%4d|%4d|%4d|%4d|%4d|%4d|%4d|\n", q[0], q[1], q[2], q[3], c[0], c[1], c[2], c[3], l, r);
-#endif
-
+		
 	}
 
 
@@ -234,8 +173,6 @@ __global__ void search(number * X, int n, number target, volatile int * c, volat
 	//set flag.
 	atomicExch(mutex, 1);
 
-	__threadfence();
-
 	//guarantees, tid-1 set the flag already
 	if(tid != 1)
 		while(atomicCAS(mutex - 1, 1, 0) != 1);
@@ -249,8 +186,6 @@ __global__ void search(number * X, int n, number target, volatile int * c, volat
 		return;
 
 	if(tid <= r - l){
-
-		__threadfence();
 
 		// problematic part
 		if(c[tid-1] < c[tid])

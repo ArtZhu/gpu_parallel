@@ -1,0 +1,15 @@
+l, r, c, q all marked volatile
+
+also, ATOMIC operations on 
+an int : iter_flag 
+AND 
+int * : half_iter_signals
+
+--step 3 atomic operation incomplete.
+complete.
+
+-----v3-----
+------------
+-----v4-----
+
+reduce the number of thread fences

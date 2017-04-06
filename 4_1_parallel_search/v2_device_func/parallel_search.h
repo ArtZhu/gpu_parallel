@@ -34,9 +34,8 @@ unsigned int num_threads;
 // GPU
 number * dev_X;
 
-
-/* host gpu search function */
-inline void gpu_search();
+/* search kernel */
+__global__ void search_main(number * dev_X, int X_len, exec_dim_t * d_child, number target, int num_threads, int * c, int * q);
 
 // IMP FLAGS
 __device__ int iter = 0;
@@ -49,7 +48,7 @@ int host_ret_flag = 0;
 // step 1.
 			//set the variables
 			// just launch 1 thread for this
-__global__ void init_search(number * X, int n, int * c, int num_threads);
+__device__ void init_search(number * X, int n, int * c, int num_threads);
 // step 2. first half
 			//compute q, use q to compute c, might set dev_ret 
 __global__ void compute(number * X, number target, int * c, int * q, int num_threads, int * dev_ret);

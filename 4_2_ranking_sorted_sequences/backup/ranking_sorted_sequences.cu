@@ -60,7 +60,6 @@ int main(){
 __global__ void ranking(number * A, int n, number * B, int * ret, int m)
 {
 
-
 #ifdef CPU_PRETTY_PRINT
 		printf("A length : %d, B length : %d\n", n, m);
 		dbg_array("A", A, FMT, n);
@@ -68,6 +67,7 @@ __global__ void ranking(number * A, int n, number * B, int * ret, int m)
 #endif
 
 	//1.
+	// this search needs to be __device__ function parallel search
 	if( m < 4 ){
 		for(int i=0; i<m; i++)
 			ret[i] = cpu_search(A, n, B[i]) + 1;
