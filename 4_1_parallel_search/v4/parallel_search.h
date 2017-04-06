@@ -9,12 +9,11 @@
 #define PARALLEL_SEARCH_H
 
 #include <stdio.h>
-#include <inttypes.h>
 #include "../../gpu_utils/util.h"
 
 int verbose = 0;
 
-#define PRETTY_PRINT 1
+//#define PRETTY_PRINT 1
 
 typedef int number;
 #define FMT "%d "
@@ -33,17 +32,14 @@ unsigned int num_threads;
 	unsigned int q_size;
 
 // GPU
-number * dev_X;
+__device__ number * dev_X;
+
+__device__ void search(number * X, int n, number target, int * c, int * q, int num_threads, volatile int * dev_ret, int * l, int * r);
+__device__ void fix(volatile int * dev_ret, int dev_ret_len, int n);
+__global__ void search_main(number * X, int n, number target, int * c, int * q, int num_threads, volatile int * dev_ret, int * l, int * r, int dev_ret_len);
 
 void _init(int argc, char ** argv);
 void _init_array(int with_file);
-
-/* ATOMIC FLAGS */
-// implementation here uses an int for each flag : signaling completion for setting q and c
-//			and an int for the number of iterations set by the thread setting r and l.
-__device__ int iter_flag;
-__device__ int * half_iter_signals;
-int * host_half_iter_signals_ptr;
 
 #include "cpu_search.h"
 

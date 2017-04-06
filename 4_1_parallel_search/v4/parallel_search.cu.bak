@@ -28,59 +28,64 @@ int * c;
 // c										-- c array from 0 to p+1
 int * q;
 // q										-- q array from 0 to p+1
-int * l;
-// l	must be allocated to num_blocks size
-int * r;
-// r  must be allocated to num_blocks size
-volatile int * dev_ret;
-// dev_ret  must be allocated to num_blocks size
+__device__ int l;
+// l										
+__device__ int r;
+// r
 // n is the number of elements
-__device__ void search(number * X, int n, number target, int * c, int * q, int num_threads, volatile int * dev_ret, int * l, int * r){
-	int tid = threadIdx.x;
+__global__ void search(number * X, int n, number target, int * c, int * q, int num_threads, int * dev_ret){
 
-	X += n * blockIdx.x;
-	l += blockIdx.x;
-	r += blockIdx.x;
-	dev_ret += blockIdx.x;
-	c += blockIdx.x * (blockDim.x + 2);
-	q += blockIdx.x * (blockDim.x + 2);
+
+	int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
 	tid += 1; // so that idx starts from 1
 
-	if(tid > n) return; // safety
+#ifdef PRETTY_PRINT
+	if(tid == 1)
+		printf("KERNEL : \narray length : %d, target : %d, num_threads : %d\n", n, target, num_threads);
+#endif
+
+	//if(tid > n) return; // safety
 
 	//1.
 	if(tid == 1){
-		*l = 0;
-		*r = n + 1;
+		l = 0;
+		r = n + 1;
 		X[0] = INT_MIN;
 		X[n + 1] = INT_MAX;
 		c[0] = 0;
 		c[num_threads + 1] = 1;
 
-		*dev_ret = -2; // for thread termination purpose
+		*dev_ret = -1; // for thread termination purpose
 	}
 
 #ifdef PRETTY_PRINT
-	if(tid == 1)
-		printf("%d %d\n", r, l);
+	if(tid == 1){
+		if(n <= 32){
+			for(int i=0; i<n+2; i++) printf("%d ", X[i]); 
+		}
+		//printf("\n");
+		//printf("| q0 | q1 | q2 | q3 | c0 | c1 | c2 | c3 | l  | r  |\n");
+		printf("1. r : %d ; l : %d\n", r, l);
+	}
 #endif
 
-	//sync
+	//sync -- 
+	//		 -- set r, l, X, c, dev_ret, tid
 	__syncthreads();
 
 	//2.
 
-	while(*r - *l > num_threads){
+	while(r - l > num_threads){
 
 		if(tid == 1){
-			q[0] = *l;
-			q[num_threads + 1] = *r;
+			q[0] = l;
+			q[num_threads + 1] = r;
 		}
 
-		q[tid] = *l + tid * ((*r - *l) / (num_threads + 1));
+		q[tid] = l + tid * ((r - l) / (num_threads + 1));
 
-		//sync -- use r, l, p;
+		//sync -- use r, l, p, tid, num_threads;
 		//		 -- set q
 		__syncthreads();
 
@@ -97,81 +102,82 @@ __device__ void search(number * X, int n, number target, int * c, int * q, int n
 				c[tid] = 1;
 		}
 
-		//sync -- use X, q, target
-		//     -- set l, r, c
+		//sync -- use X, q, target, tid
+		//     -- set dev_ret, c
 		__syncthreads();
+
 		// if ret has been set, return, a replacement for the "return" in the conditional statement;
-		if(*dev_ret >= -1){
+		if(*dev_ret >= 0){
+#ifdef PRETTY_PRINT
+			if(tid == 1)
+				printf("dev ret0 : %d\n", *dev_ret);
+#endif
 			return;
 		}
 
 
 		if(c[tid] < c[tid + 1]){
-			*l = q[tid];
-			*r = q[tid + 1];
+			l = q[tid];
+			r = q[tid + 1];
+			printf("tid : %d setting r, l to be %d %d\n", tid, r, l);
 		}
+
+		//sync -- use dev_ret, q, c, tid
+		//		 -- set l, r
+		__syncthreads();
 
 
 		if(tid == 1 && c[0] < c[1]){
-			*l = q[0];
-			*r = q[1];
+			l = q[0];
+			r = q[1];
 		}
 
-		//sync -- use q, c, tid
+		//sync -- use dev_ret, q, c, tid
 		//		 -- set l, r
 		__syncthreads();
 
 
 #ifdef PRETTY_PRINT
-		if(tid == 1)
-			printf("%d %d\n", r, l);
+		if(tid == 1){
+			printf("r : %d ; l : %d\n", r, l);
+			printf("c[%d] = %d, c[%d] = %d, c[%d] = %d\n", 1023, c[1023], 1024, c[1024], 1025, c[1025]);
+			//printf("|%4d|%4d|%4d|%4d|%4d|%4d|%4d|%4d|%4d|%4d|\n", q[0], q[1], q[2], q[3], c[0], c[1], c[2], c[3], l, r);
+		}
 #endif
 
 	}
 
-	if(tid > *r - *l) return;
-
-	if(target == X[*l+tid]){
-		*dev_ret = *l + tid - 1; // so that ret idx starts from 0
+	if(tid > r - l){ 
+		//corresponds with the next syncthreads();
+		__syncthreads();
+		return;
 	}
-	else if(target > X[*l+tid]){
+
+	if(target == X[l+tid]){
+		*dev_ret = l + tid - 1; // so that ret idx starts from 0
+	}
+	else if(target > X[l+tid]){
 		c[tid] = 0;
 	}
 	else{
 		c[tid] = 1;
 	}
 
-	if(*dev_ret >= -1)
+	// sync -- use l, X, tid, target
+	//			-- set dev_ret, c
+	__syncthreads();
+
+#ifdef PRETTY_PRINT
+	printf("dev ret1 : %d\n", *dev_ret);
+#endif
+	if(*dev_ret >= 0)
 		return;
 
 	if(c[tid-1] < c[tid])
-		*dev_ret = *l + tid - 1 - 1; // so that ret idx starts from 0
-
-}
-
-__device__ void fix(volatile int * dev_ret, int dev_ret_len, int n){
-	int tid = threadIdx.x + blockIdx.x * blockDim.x;
-
-	while(dev_ret[tid] == -2) ;
-
-	if(tid < dev_ret_len){
-		int idx = dev_ret[tid];
-		if(idx != n - 1 && idx != -1){
-			dev_ret[0] = idx + n * tid;
-		}
-	}
-}
-
-__global__ void search_main(number * X, int n, number target, int * c, int * q, int num_threads, volatile int * dev_ret, int * l, int * r, int dev_ret_len)
-{
-	search(X, n, target, c, q, num_threads, dev_ret, l, r);
-	fix(dev_ret, dev_ret_len, n);
-
-	__threadfence();
-
-	if(threadIdx.x + blockIdx.x * blockDim.x == 0)
-	printf("gpu found : %d\n", *dev_ret);
-
+		*dev_ret = l + tid - 1 - 1; // so that ret idx starts from 0
+#ifdef PRETTY_PRINT
+	printf("dev ret2 : %d\n", *dev_ret);
+#endif
 }
 
 // main
@@ -190,22 +196,17 @@ int main(int argc, char * argv[])
 	cudaSetDevice(0);
 	cudaDeviceReset();
 
-	unsigned int num_blocks = (1023 + num_threads) / 1024;
-	unsigned int threads_per_block = num_threads > 1024 ? 1024 : num_threads;
-
-	c_size = (2 * num_blocks + num_threads) * sizeof(int);
-	q_size = (2 * num_blocks + num_threads) * sizeof(int);
-
 	// X_len + 2 for the algorithm element at idx 0 and n + 1 (originally 1, 2, ..., n)
 	err_code[0] = cudaMalloc( &dev_X , X_size );
 	err_code[1] = cudaMalloc( &c , c_size );
 	err_code[2] = cudaMalloc( &q , q_size );
-	err_code[3] = cudaMalloc( &dev_ret , sizeof(volatile int) * num_blocks);
-	err_code[4] = cudaMalloc( &l , sizeof(int) * num_blocks );
-	err_code[5] = cudaMalloc( &r , sizeof(int) * num_blocks );
-	for(int i=0; i<6; i++){ gerror(err_code[i]); }
+	err_code[3] = cudaMalloc( &dev_ret , sizeof(int) );
+	for(int i=0; i<4; i++){ gerror(err_code[i]); }
 
 	gerror(cudaMemcpy(dev_X, host_X, X_size, cudaMemcpyHostToDevice));
+
+	unsigned int num_blocks = (1023 + num_threads) / 1024;
+	unsigned int threads_per_block = num_threads > 1024 ? 1024 : num_threads;
 
 	ret_idx = 10086;
 
@@ -214,7 +215,7 @@ int main(int argc, char * argv[])
 	d->Dg = {num_blocks, 1, 1};
 	d->Db = {threads_per_block, 1, 1};
 	gstart();
-	search_main<<<d->Dg, d->Db>>>(dev_X, X_len, target, c, q, num_threads, dev_ret, l, r, num_blocks);
+	search<<<d->Dg, d->Db>>>(dev_X, X_len, target, c, q, num_threads, dev_ret);
 	gend(&gputime);
 	printf("gputime : %f ms\n", gputime);
 	gerror(cudaGetLastError());
@@ -235,8 +236,6 @@ int main(int argc, char * argv[])
 	gerror(cudaFree(c));
 	gerror(cudaFree(q));
 	gerror(cudaFree(dev_ret));
-	gerror(cudaFree(l));
-	gerror(cudaFree(r));
 	free(host_X);
 }
 
@@ -280,6 +279,8 @@ void _init(int argc, char ** argv)
 	}
 
 	X_size = (X_len + 2) * sizeof(number);
+	c_size = (num_threads + 2) * sizeof(int);
+	q_size = (num_threads + 2) * sizeof(int);
 
 	_init_array(fname[0] != 0);
 	

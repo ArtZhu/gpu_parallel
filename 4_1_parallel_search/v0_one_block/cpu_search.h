@@ -35,7 +35,7 @@ int cpu_search(number * X, int n, number target)
 	while(X[idx] > target){
 		idx--;
 	}
-	while(X[idx+1] <= target){
+	while(idx < n-1 && X[idx+1] <= target){
 		idx++;
 	}
 
