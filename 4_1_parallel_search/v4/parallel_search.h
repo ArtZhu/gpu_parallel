@@ -33,10 +33,11 @@ unsigned int num_threads;
 
 // GPU
 __device__ number * dev_X;
+int * flags;
 
-__device__ void search(number * X, int n, number target, int * c, int * q, int num_threads, volatile int * dev_ret, int * l, int * r);
+__device__ void search(number * X, int n, number target, int * c, int * q, int num_threads, volatile int * dev_ret, int * l, int * r, int * flags, int * found);
 __device__ void fix(volatile int * dev_ret, int dev_ret_len, int n, int * ret_value);
-__global__ void search_main(number * X, int n, number target, int * c, int * q, int num_threads, volatile int * dev_ret, int * l, int * r, int dev_ret_len, int * ret_value);
+__global__ void search_main(number * X, int n, number target, int * c, int * q, int num_threads, volatile int * dev_ret, int * l, int * r, int dev_ret_len, int * ret_value, int * flags);
 
 void _init(int argc, char ** argv);
 void _init_array(int with_file);

@@ -1,0 +1,72 @@
+launching 64 blocks, 1024 threads per block.
+block 12 done : 59634111
+block 36 done : 59635067
+block 6 done : 59637409
+block 22 done : 378801805
+block 16 done : 378984181
+block 4 done : 378811657
+block 10 done : 378986744
+block 46 done : 378802813
+block 40 done : 378984405
+block 28 done : 378812670
+block 34 done : 378986955
+block 5 done : 329049526
+block 17 done : 329465832
+block 11 done : 329467956
+block 23 done : 329216488
+block 29 done : 329049372
+block 41 done : 329464841
+block 35 done : 329467680
+block 47 done : 329216390
+block 7 done : 13247668
+block 19 done : 13072774
+block 1 done : 12977209
+block 13 done : 13245186
+block 30 done : 59637297
+block 21 done : 4137702611
+block 31 done : 13248430
+block 45 done : 4137702866
+block 43 done : 13073855
+block 25 done : 12977340
+block 0 done : 59215754
+block 37 done : 13245313
+block 24 done : 59215893
+block 3 done : 4137590010
+block 27 done : 4137590874
+block 15 done : 4137892263
+block 39 done : 4137893594
+block 18 done : 59460090
+block 42 done : 59460307
+block 9 done : 4137768556
+block 33 done : 4137768682
+block 20 done : 4200992428
+block 14 done : 4201355860
+block 2 done : 4200898494
+block 8 done : 4201358745
+block 44 done : 4200992285
+block 38 done : 4201355692
+block 26 done : 4200897534
+block 32 done : 4201358634
+[ block 48 done : 59746927
+block 49 done : 59746695
+block 57 done : 13366935
+block 58 done : 329169096
+block 54 done : 378932802
+block 59 done : 379105734
+block 62 done : 329337281
+block 63 done : 13193113
+block 51 done : 379109540
+block 50 done : 59582143
+block 53 done : 59756937
+block 60 done : 329590618
+block 61 done : 329590846
+block 56 done : 59757416
+block 55 done : 59583009
+block 52 done : 379111445
+9 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 ]
+0 tid 9 0
+gpu found : 9
+gputime : 3.492864 ms
+device idx = 524288;
+cputime : 0.001000 ms
+host idx = 9;

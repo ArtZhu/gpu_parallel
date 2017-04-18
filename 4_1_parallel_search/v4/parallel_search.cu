@@ -10,6 +10,9 @@
 
 #include "parallel_search.h"
 
+/* IMPORTANT */
+// SEARCH 1392 in even number array gives 696 in gpu, 695 in CPU.
+
 ///////////////////////////////////////////////////////////
 // Input to the algorithm //
 // X 										-- strictly ordered array
@@ -35,7 +38,8 @@ int * r;
 volatile int * dev_ret;
 // dev_ret  must be allocated to num_blocks size
 // n is the number of elements
-__device__ void search(number * X, int n, number target, int * c, int * q, int num_threads, volatile int * dev_ret, int * l, int * r){
+__device__ void search(number * X, int n, number target, int * c, int * q, int num_threads, volatile int * dev_ret, int * l, int * r, int * flags, int * found){
+
 	int tid = threadIdx.x;
 
 	X += n * blockIdx.x;
@@ -57,7 +61,7 @@ __device__ void search(number * X, int n, number target, int * c, int * q, int n
 		c[0] = 0;
 		c[num_threads + 1] = 1;
 
-		*dev_ret = -2; // for thread termination purpose
+		*dev_ret = INT_MAX; // for thread termination purpose
 	}
 
 #ifdef PRETTY_PRINT
@@ -90,9 +94,12 @@ __device__ void search(number * X, int n, number target, int * c, int * q, int n
 
 		if(target == X[q[tid]]){
 			*dev_ret = q[tid]; // not so that ret idx starts from 0
-			// can i return here???
-			// no
-			//return;
+			__threadfence();
+			atomicExch(flags + blockIdx.x, 1);
+			//printf("flag[%d] marked\n", blockIdx.x);
+			__threadfence();
+			*found = 1;
+			__threadfence();
 		}
 		else{
 			if(target > X[q[tid]])
@@ -104,13 +111,12 @@ __device__ void search(number * X, int n, number target, int * c, int * q, int n
 		//sync -- use X, q, target
 		//     -- set l, r, c
 		__syncthreads();
-		// if ret has been set, return, a replacement for the "return" in the conditional statement;
-		if(*dev_ret >= -1){
+		if(*found){
 #ifdef PRETTY_PRINT
-		if(tid == 1)
-			printf("%d : dev_ret0 %d\n", blockIdx.x, *dev_ret);
+			if(tid == 1)
+				printf("%d : dev_ret0 %d\n", blockIdx.x, *dev_ret);
 #endif
-			return;
+			break;
 		}
 
 
@@ -150,103 +156,131 @@ __device__ void search(number * X, int n, number target, int * c, int * q, int n
 			printf("%d : dev_ret1 %d\n", blockIdx.x, *dev_ret);
 #endif
 
-	if(tid > *r - *l) return;
+	//if(tid > *r - *l) return;
+		if(tid <= *r - *l){
 
-	if(target == X[*l+tid]){
-		*dev_ret = *l + tid; // so that ret idx starts from 0
-	}
-	else if(target > X[*l+tid]){
-		c[tid] = 0;
-	}
-	else{
-		c[tid] = 1;
-	}
-
-#ifdef PRETTY_PRINT
-	if(tid == 1)
-		printf("%d : dev_ret2 %d\n", blockIdx.x, *dev_ret);
-#endif
-
-	if(*dev_ret >= -1)
-		return;
-
-	if(c[tid-1] < c[tid])
-		*dev_ret = *l + tid - 1; // so that ret idx starts from 0
-	if(tid == *r - *l && c[tid] == 0)
-		*dev_ret = *r - 1; // so that ret idx starts from 0
+			if(target == X[*l+tid]){
+				*dev_ret = *l + tid; // so that ret idx starts from 0
+				__threadfence();
+				atomicExch(flags + blockIdx.x, 1);
+			//printf("flag[%d] marked\n", blockIdx.x);
+				__threadfence();
+				*found = 1;
+				__threadfence();
+			}
+			else if(target > X[*l+tid]){
+				c[tid] = 0;
+			}
+			else{
+				c[tid] = 1;
+			}
 
 #ifdef PRETTY_PRINT
-	if(tid == 1)
-		printf("%d : dev_ret3 %d\n", blockIdx.x, *dev_ret);
+			if(tid == 1)
+				printf("%d : dev_ret2 %d\n", blockIdx.x, *dev_ret);
 #endif
 
+			__syncthreads();
+			//if(*dev_ret >= -1) return;
+			if(*found) return;
+
+			if(c[tid-1] < c[tid])
+				*dev_ret = *l + tid - 1; // so that ret idx starts from 0
+			if(tid == *r - *l && c[tid] == 0)
+				*dev_ret = *r - 1; // so that ret idx starts from 0
+
+#ifdef PRETTY_PRINT
+			if(tid == 1)
+				printf("%d : dev_ret3 %d\n", blockIdx.x, *dev_ret);
+#endif
+		}
+
+		__threadfence();
+		__syncthreads();
+		if(threadIdx.x == 0){
+			atomicExch(flags + blockIdx.x, 1);
+			//printf("flag[%d] marked\n", blockIdx.x);
+		}
 }
 
 __device__ void fix(volatile int * dev_ret, int dev_ret_len, int n, int * ret_value){
-	int tid = threadIdx.x;
+	int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
-	if(blockIdx.x > 0) return;
+	if(tid + 1 > dev_ret_len) return;
 
-	while(dev_ret[tid] == -2) ;
-
-	int curr, next;
-	int iter, idx;
-	for(iter = 0; iter < (n+1023)/1024; iter++){
-		idx = iter * 1024 + tid;
-		if(idx < dev_ret_len){
-			while((curr = dev_ret[idx]) < 0 || curr > n) ;
-			while((next = dev_ret[idx+1]) < 0 || next > n) ;
-			//curr = dev_ret[idx];
-			//next = dev_ret[idx+1];
-			if(curr > next){
-				if(curr == n){
-					//atomicExch(dev_ret + 0, idx * n + n + next);
-					atomicExch(ret_value, idx * n + n + next);
-					printf("%d : GPU : %d\n curr : %d; next : %d\n", idx, idx * n + n + next, curr, next);
-				}
-				else{
-					//atomicExch(dev_ret + 0, idx * n + curr);
-					atomicExch(ret_value, idx * n + curr);
-					printf("%d : GPU : %d\n curr : %d; next : %d\n", idx, idx * n + curr, curr, next);
-				}
-			}
-		}
+	/*
+	if(tid == 0)
+		printf("%d n\n", n);
+	*/
+	if(dev_ret[tid] > dev_ret[tid+1] && dev_ret[tid+1] == 0){
+		printf("%d tid %d %d\n", tid, dev_ret[tid], dev_ret[tid+1]);
+		*ret_value = tid * n + dev_ret[tid];
 	}
+
 }
 
-__global__ void search_main(number * X, int n, number target, int * c, int * q, int num_threads, volatile int * dev_ret, int * l, int * r, int dev_ret_len, int * ret_value)
+__global__ void search_main(number * X, int n, number target, int * c, int * q, int num_threads, volatile int * dev_ret, int * l, int * r, int dev_ret_len, int * ret_value, int * flags)
 {
+	__shared__ int found;
+	found = 0;
+	int * ptr = &found;
+
 	// doesn't work for non-pow 2
 	int tmp_n = n / dev_ret_len;
 
-	/*
-	if(threadIdx.x == 0){
-		printf("array length : %d\n", n);
-		printf("tmp_n : %d\n dev_ret_len = %d\n", tmp_n, dev_ret_len);
-	}
-	*/
-
 	num_threads = num_threads > 1024 ? 1024 : num_threads;
 
-	search(X, tmp_n, target, c, q, num_threads, dev_ret, l, r);
+	search(X, tmp_n, target, c, q, num_threads, dev_ret, l, r, flags, ptr);
 
-	if(blockIdx.x == 0 && threadIdx.x == 0){
+	int tid = threadIdx.x + blockIdx.x * blockDim.x;
+
+	/*
+	if(tid == 0){
+		int i;
 		printf("[ ");
-		for(int i=0; i<dev_ret_len; i++){
+		for(i=0; i<dev_ret_len; i++)
 			printf("%d ", dev_ret[i]);
-		}
 		printf("]\n");
 	}
 
-	
-	//cudaDeviceSynchronize();
+	if(tid == 0){
+		int i;
+		printf("flags: [ ");
+		for(i=0; i<gridDim.x; i++)
+			printf("%d ", flags[i]);
+		printf("]\n");
+	}
+	*/
 
-	fix(dev_ret, dev_ret_len, tmp_n, ret_value);
+	//tid < num_blocks
+	if(gridDim.x == 1){
+		if(tid == 0){
+			*ret_value = *dev_ret;
+		}
+	}else{
+		if(tid < gridDim.x - 1){
+			int count;
+			count = 0;
+			while(atomicCAS(flags + tid, 1, 1) != 1) 
+				//{ count++; }
+				{}
+				//{if(count < 2) printf("%d count %d\n", tid, count++); }
+
+			count = 0;
+			while(atomicCAS(flags + tid + 1, 1, 1) != 1) 
+				//{ count++; }
+				{}
+				//{if(count < 2) printf("%d count %d\n", tid, count++); }
+			//cudaDeviceSynchronize();
+
+			fix(dev_ret, dev_ret_len, tmp_n, ret_value);
+		}
+	}
 
 	__threadfence();
 
 	if(threadIdx.x + blockIdx.x * blockDim.x == 0)
-	printf("gpu found : %d\n", *dev_ret);
+		printf("gpu found : %d\n", *dev_ret);
 
 }
 
@@ -280,9 +314,13 @@ int main(int argc, char * argv[])
 	err_code[4] = cudaMalloc( &l , sizeof(int) * num_blocks );
 	err_code[5] = cudaMalloc( &r , sizeof(int) * num_blocks );
 	err_code[6] = cudaMalloc( &ret_value , sizeof(int) );
-	for(int i=0; i<7; i++){ gerror(err_code[i]); }
+	err_code[7] = cudaMalloc( &flags , num_blocks * sizeof(int) );
+	for(int i=0; i<8; i++){ gerror(err_code[i]); }
 
 	gerror(cudaMemcpy(dev_X, host_X, X_size, cudaMemcpyHostToDevice));
+	gerror(cudaMemset(flags, 0, num_blocks * sizeof(int)));
+
+	cudaDeviceSynchronize();
 
 	ret_idx = 10086;
 
@@ -290,8 +328,9 @@ int main(int argc, char * argv[])
 
 	d->Dg = {num_blocks, 1, 1};
 	d->Db = {threads_per_block, 1, 1};
+	d->Ns = sizeof(int);
 	gstart();
-	search_main<<<d->Dg, d->Db>>>(dev_X, X_len, target, c, q, num_threads, dev_ret, l, r, num_blocks, ret_value);
+	search_main<<<d->Dg, d->Db, d->Ns>>>(dev_X, X_len, target, c, q, num_threads, dev_ret, l, r, num_blocks, ret_value, flags);
 	gend(&gputime);
 	printf("gputime : %f ms\n", gputime);
 	gerror(cudaGetLastError());
@@ -315,6 +354,7 @@ int main(int argc, char * argv[])
 	gerror(cudaFree(l));
 	gerror(cudaFree(r));
 	gerror(cudaFree(ret_value));
+	gerror(cudaFree(flags));
 	free(host_X);
 }
 
