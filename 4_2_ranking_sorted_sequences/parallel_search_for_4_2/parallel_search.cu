@@ -12,14 +12,18 @@
 
 __global__ void search_main(number * X, int n, number target, int num_threads, ull * dev_ret)
 {
+	__shared__ ull record;
 	int l, r, *ptr;
-	ull record, *ptr_u;
+	ull *ptr_u;
 
 	ptr_u = &record;
 	ptr = (int *) ptr_u;
 
-	//record = atomicAdd(dev_ret, 0);
-	record = atomicCAS(dev_ret, -2L, 0);
+	if(threadIdx.x == 0){
+		record = atomicCAS(dev_ret, -2L, 0);
+	}
+
+	__syncthreads();
 	l = *ptr;
 	r = *(ptr+1);
 
@@ -55,7 +59,11 @@ __global__ void search_main(number * X, int n, number target, int num_threads, u
 			}
 		}
 
-		record = atomicCAS(dev_ret, -2L, 0);
+		if(threadIdx.x == 0){
+			record = atomicCAS(dev_ret, -2L, 0);
+		}
+
+		__syncthreads();
 		l = *ptr;
 		r = *(ptr+1);
 	}
@@ -110,8 +118,8 @@ int main(int argc, char * argv[])
 
 	d->Dg = {num_blocks, 1, 1};
 	d->Db = {threads_per_block, 1, 1};
-	//d->Ns = 3 * sizeof(int) + 2 * (2 + threads_per_block) * sizeof(int);
-	//printf("Ns : %d\n", d->Ns);
+	d->Ns = sizeof(ull);
+	printf("Ns : %lu\n", d->Ns);
 	gstart();
 	search_main<<<d->Dg, d->Db, d->Ns>>>(dev_X, X_len, target, num_threads, dev_ret);
 	gend(&gputime);

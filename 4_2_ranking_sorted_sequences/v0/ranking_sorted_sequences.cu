@@ -65,6 +65,7 @@ __global__ void correction(int * ret, int m);
 // int num_break_points = (m + (sqm - 1)) / sqm;
 //	sqm is also num_threads
 //  ret must be [0, x1, x2, x3, x4...] but pointing to x1
+
 __global__ void ranking(number * A, int n, number * B, int * ret, int m, int sqm, int num_break_points)
 {
 	int tid = threadIdx.x + blockIdx.x * blockDim.x;
