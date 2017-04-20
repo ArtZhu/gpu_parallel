@@ -90,17 +90,26 @@ __global__ void ranking(number * A, int n, number * B, int * ret, int m, int num
 	int i;
 	number target;
 
-	*(((int*) &search_rank)) 			= 0;
-	*(((int*) &search_rank) + 1) 	= n + 2;
+	int * pl, * pr;
+
+	pl = (int*) &search_rank ;
+	pr = pl + 1;
 
 	for(i = 0; i<m; i++){
+	
+		*pl	= 0;
+		*pr = n+2;
+
+		__syncthreads();
+
 		target = B[i];
 		search(A, n, target, num_threads, &search_rank);
 		ret[i] = *((int *) &search_rank);
 		if(threadIdx.x == 0){
 			printf("%llx\n", search_rank);
-			printf("ret[%d] = %d\n", i, ret[i]);
+			printf("pl = %d, pr = %d\n", *pl, *pr);
 		}
+
 		__syncthreads();
 	}
 }
