@@ -106,6 +106,7 @@ __global__ void ranking(number * A, int n, number * B, int * ret, int m, int num
 		}
 		return;
 	}
+
 //		2. Concurrently rank b_sqm, b_2sqm, ..., bm in A 
 //										by applying Alg 4_1 with p = sqrt(n)
 //			 Let 	j[i] = rank(b_isqm : A)
