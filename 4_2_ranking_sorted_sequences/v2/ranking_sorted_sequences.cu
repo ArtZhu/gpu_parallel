@@ -89,15 +89,36 @@ __global__ void ranking(number * A, int n, number * B, int * ret, int m, int num
 	int i, dev_ret;
 	number target;
 
-	for(i = 0; i<m; i++){
+// 		1. If m < 4, then rank the elements of B 
+//			 							by applying Alg 4_1 with p = n
+//								 then exit
+	if(m < 4){
+		for(i = 0; i<m; i++){
 
-		target = B[i];
-		search(A, n, target, num_threads, &dev_ret);
-		ret[i] = *((int *) &search_rank);
-		if(threadIdx.x == 0){
-			printf("%d\n", dev_ret);
+			target = B[i];
+			search(A, n, target, num_threads, &dev_ret);
+			ret[i] = *((int *) &search_rank);
+			if(threadIdx.x == 0){
+				printf("%d\n", dev_ret);
+			}
+
+			__syncthreads();
 		}
-
-		__syncthreads();
+		return;
 	}
+//		2. Concurrently rank b_sqm, b_2sqm, ..., bm in A 
+//										by applying Alg 4_1 with p = sqrt(n)
+//			 Let 	j[i] = rank(b_isqm : A)
+//						j[0] = 0
+//		3. For 0 <= i <= sqm - 1,
+//					let B_i = ( b_isqm+1, ... , b_(i+1)sqm - 1 )
+//					let A_i = ( a_j[i]+1, ... , a_j[i+1] )
+//			 If j[i] == j[i+1], then
+//					set rank(B_i : A_i) = (0, ... , 0)
+//			 else
+//					recurse compute rank(B_i : A_i)
+//		4. Let 1 <= k <= m be an arbitrary index not multiple of sqm
+//			 Let i = floor( k / sqm )
+//			 rank(b_k : A) = j[i] + rank(b_k : A_i)
+// end
 }
