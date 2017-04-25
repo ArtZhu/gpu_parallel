@@ -15,6 +15,7 @@
 #include "utilc.h"
 
 template <typename T>
+__host__ __device__
 void dbg_array(const char * tag, T * ptr, const char * FMT, int len);
 
 		/* function prototype */
@@ -84,12 +85,11 @@ void gtime(float * gputime, void (*kernel)(Arguments...), exec_dim_t * d, Argume
 //	Printer
 //------------------------------------------------------------------------
 template <typename T>
+__host__ __device__
 inline void dbg_array(const char * tag, T * ptr, const char * FMT, int len){
 	printf("%s : [ ", tag);
-	char fmt[strlen(FMT)+1];
-	sprintf(fmt, "%s ", FMT);
 	for(int iiiii=0; iiiii<len; iiiii++){
-		printf(fmt , ptr[iiiii]);
+		printf(FMT , ptr[iiiii]);
 	}
 	printf("]\n");
 }

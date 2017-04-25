@@ -39,7 +39,7 @@ int cpu_search(number * X, int n, number target)
 		idx++;
 	}
 
-	return idx;
+	return idx+1;
 }
 
 #endif

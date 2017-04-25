@@ -38,19 +38,25 @@ __global__ void search_main(number * dev_X, int X_len, exec_dim_t * d_child, num
 {
 	//1.
 	init_search(dev_X, X_len, c, num_threads);
-	//2. loop
-	do{
-		compute<<<d_child->Dg, d_child->Db>>>(dev_X, target, c, q, num_threads, &dev_ret);
-		cudaDeviceSynchronize();
-		set_bounds<<<d_child->Dg, d_child->Db>>>(c, q, num_threads);
-		cudaDeviceSynchronize();
-	}while(dev_ret < 0 && !dev_ret_flag);
-	//3.
-	if(dev_ret < 0){
-		set_ret1<<<d_child->Dg, d_child->Db>>>(dev_X, target, c, q, num_threads);
-		cudaDeviceSynchronize();
-		set_ret2<<<d_child->Dg, d_child->Db>>>(c, num_threads);
-	}
+	//2. 
+	search(dev_X, d_child, target, num_threads, c, q);
+}
+
+__device__ void search(number * dev_X, exec_dim_t * d_child, number target, int num_threads, int * c, int * q)
+{
+	compute<<<d_child->Dg, d_child->Db>>>(dev_X, target, c, q, num_threads, &dev_ret);
+	/*
+	if(threadIdx.x == 0 && blockIdx.x == 0){
+		dbg_array("C", c, "%d ", num_threads+2);
+		dbg_array("Q", q, "%d ", num_threads+2);
+	}*/
+	cudaDeviceSynchronize();
+	set_bounds<<<d_child->Dg, d_child->Db>>>(dev_X, c, q, target, num_threads, d_child);
+	/*
+	if(threadIdx.x == 0 && blockIdx.x == 0){
+		dbg_array("C", c, "%d ", num_threads+2);
+		dbg_array("Q", q, "%d ", num_threads+2);
+	}*/
 }
 
 // main
@@ -147,8 +153,6 @@ __global__ void compute(number * X, number target, int * c, int * q, int num_thr
 	}
 
 	//while(r - l > num_threads)
-	// if statement below using dev_ret_flag as bool (replacement)
-
 	//refactored this part because no device sync
 	if(tid == 1)
 		q[0] = l;
@@ -158,17 +162,11 @@ __global__ void compute(number * X, number target, int * c, int * q, int num_thr
 	//
 	q[tid] = l + tid * ((r - l) / (num_threads + 1));
 
-	/* this is unnecessary because each thread sets its own element from q and uses it.
 	//sync -- use r, l, p, tid, num_threads;
 	//		 -- set q
-	__syncthreads();
-	 */
 
 	if(target == X[q[tid]]){
 		*dev_ret = q[tid] - 1; // so that ret idx starts from 0
-		// can i return here???
-		// no
-		//return;
 	}
 	else{
 		if(target > X[q[tid]])
@@ -180,7 +178,7 @@ __global__ void compute(number * X, number target, int * c, int * q, int num_thr
 
 // step 2. second half
 // use c, q, set l, r
-__global__ void set_bounds(int * c, int * q, int num_threads)
+__global__ void set_bounds(number * dev_X, int * c, int * q, number target, int num_threads, exec_dim_t * d_child)
 {
 
 	int tid = threadIdx.x + blockIdx.x * blockDim.x;
@@ -198,80 +196,42 @@ __global__ void set_bounds(int * c, int * q, int num_threads)
 		return;
 	}
 
-
 	if(c[tid] < c[tid + 1]){
 		l = q[tid];
 		r = q[tid + 1];
 		//printf("iter : %d; tid : %d setting r, l to be %d %d\n", iter, tid, r, l);
 		//printf("c[%d] = %d; c[%d + 1] = %d;\n", tid, c[tid], tid, c[tid+1]);
+		//printf("tid : %d launching r, l: %d, %d\n", tid, r, l);
+		launch_children(dev_X, r, l, d_child, target, c, q, num_threads);
 	}
 
 	if(tid == 1 && c[0] < c[1]){
 		l = q[0];
 		r = q[1];
+		//printf("tid : %d launching\n", tid);
+		launch_children(dev_X, r, l, d_child, target, c, q, num_threads);
 	}
+
 }
 
-// step 3. first half
-__global__ void set_ret1(number * X, number target, int * c, int * q, int num_threads)
+__device__ void launch_children(number * dev_X, int r, int l, exec_dim_t * d_child, number target, int * c, int * q, int num_threads)
 {
-
-	int tid = threadIdx.x + blockIdx.x * blockDim.x;
-
-	tid += 1; // so that idx starts from 1
-
-	if(tid > num_threads) return; //safety
-
-	if(tid > r - l){ 
-		//corresponds with the next syncthreads();
+	int len = r - l;
+	if(len <= 1){
+		dev_ret = l;
 		return;
 	}
+	
+	unsigned int num_blocks, threads_per_block;
 
-	if(target == X[l+tid]){
-		dev_ret = l + tid - 1; // so that ret idx starts from 0
-	}
-	else if(target > X[l+tid]){
-		c[tid] = 0;
-	}
-	else{
-		c[tid] = 1;
-	}
-
-	/* after step3 becomes 2 parts, this is unecessary.
-
-	// as long as l + tid and X[l+tid] unique, this is unecessary.
-	// just a safety for now
-
-	// sync -- use l, X, tid, target
-	//			-- set dev_ret, c
-	__syncthreads();
-	 */
+	num_threads = len > num_threads ? num_threads : len;
+	threads_per_block = num_threads > 1024? 1024 : num_threads;
+	num_blocks = (1023 + num_threads) / 1024;
+	d_child->Dg = {num_blocks, 1, 1};
+	d_child->Db = {threads_per_block, 1, 1};
+	search(dev_X, d_child, target, num_threads, c, q);
 }
 
-// step 3. second half
-__global__ void set_ret2(int * c, int num_threads)
-{
-
-	int tid = threadIdx.x + blockIdx.x * blockDim.x;
-
-	tid += 1; // so that idx starts from 1
-
-	if(tid > num_threads) return;
-
-#ifdef PRETTY_PRINT
-	printf("dev ret1 : %d\n", dev_ret);
-#endif
-
-	if(dev_ret >= 0)
-		return;
-
-	if(c[tid-1] < c[tid])
-		dev_ret = l + tid - 1 - 1; // so that ret idx starts from 0
-
-#ifdef PRETTY_PRINT
-	printf("dev ret2 : %d\n", dev_ret);
-#endif
-}
 
 char fname[80];
 void _init(int argc, char ** argv)

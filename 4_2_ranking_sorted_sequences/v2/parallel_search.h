@@ -17,7 +17,7 @@ typedef unsigned long long int ull;
 
 __device__ ull search_rank;
 
-__device__ void search(number * X, int n, number target, int * dev_ret, int start, int num_threads)
+__device__ void search(number * X, int n, number target, int * dev_ret, int start_idx, int num_threads)
 {
 	__shared__ ull record;
 	int l, r, *ptr;
@@ -28,7 +28,7 @@ __device__ void search(number * X, int n, number target, int * dev_ret, int star
 
 	//thread controlling
 	int tid;
-	tid = threadIdx.x - start;
+	tid = threadIdx.x - start_idx;
 	if(tid >= num_threads)
 		return;
 

@@ -92,7 +92,7 @@ __global__ void ranking(number * A, int n, number * B, int * ret, int m, int num
 	for(i = 0; i<m; i++){
 
 		target = B[i];
-		search(A, n, target, num_threads, &dev_ret);
+		search(A, n, target, &dev_ret, 0, num_threads);
 		ret[i] = *((int *) &search_rank);
 		if(threadIdx.x == 0){
 			printf("%d\n", dev_ret);

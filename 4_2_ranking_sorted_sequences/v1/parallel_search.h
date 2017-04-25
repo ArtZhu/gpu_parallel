@@ -17,7 +17,7 @@ typedef unsigned long long int ull;
 
 __device__ ull search_rank;
 
-__device__ void search(number * X, int n, number target, int num_threads, int * dev_ret)
+__device__ void search(number * X, int n, number target, int * dev_ret, int start_idx, int num_threads)
 {
 	__shared__ ull record;
 	int l, r, *ptr;
@@ -26,7 +26,13 @@ __device__ void search(number * X, int n, number target, int num_threads, int * 
 	ptr_u = &record;
 	ptr = (int *) ptr_u;
 
-	if(threadIdx.x == 0){
+	//thread controlling
+	int tid;
+	tid = threadIdx.x - start_idx;
+	if(tid >= num_threads)
+		return;
+
+	if(tid == 0){
 		*ptr = 0;
 		*(ptr+1) = n+1;
 	}
@@ -35,13 +41,13 @@ __device__ void search(number * X, int n, number target, int num_threads, int * 
 	l = *ptr;
 	r = *(ptr+1);
 
-	//printf("%llx %u %d %d\n", -2L, threadIdx.x, l, r);
+	//printf("%llx %u %d %d\n", -2L, tid, l, r);
 
 	int block_n, start, s, idx;
 	while(r - l > 1){
 
 		/*
-		if(threadIdx.x == 0 && blockIdx.x == 0){
+		if(tid == 0 && blockIdx.x == 0){
 			printf("%llx\n", record);
 			printf("%d %d\n", l, r);
 		}
@@ -54,10 +60,10 @@ __device__ void search(number * X, int n, number target, int num_threads, int * 
 
 		start = l + (blockIdx.x * block_n);
 
-		idx = start + threadIdx.x * s;
+		idx = start + tid * s;
 		if(idx < r){
 
-			//printf("threadIdx.x : %u\nblock_n : %d\ns : %d\nstart : %d\nidx : %d\n", threadIdx.x, block_n, s, start, idx);
+			//printf("tid : %u\nblock_n : %d\ns : %d\nstart : %d\nidx : %d\n", tid, block_n, s, start, idx);
 
 			if(X[idx] <= target && X[idx + s] >= target){
 				*ptr = idx;
@@ -67,7 +73,7 @@ __device__ void search(number * X, int n, number target, int num_threads, int * 
 			}
 		}
 
-		if(threadIdx.x == 0){
+		if(tid == 0){
 			record = atomicCAS(&search_rank, -2L, 0);
 		}
 
@@ -77,7 +83,7 @@ __device__ void search(number * X, int n, number target, int num_threads, int * 
 	}
 
 	/*
-	if(threadIdx.x == 0 && blockIdx.x == 0){
+	if(tid == 0 && blockIdx.x == 0){
 		printf("%llx\n", record);
 		printf("%d %d\n", l, r);
 	}

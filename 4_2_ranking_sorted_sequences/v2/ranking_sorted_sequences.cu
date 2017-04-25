@@ -111,6 +111,10 @@ __global__ void ranking(number * A, int n, number * B, int * ret, int m, int num
 //										by applying Alg 4_1 with p = sqrt(n)
 //			 Let 	j[i] = rank(b_isqm : A)
 //						j[0] = 0
+
+	int sqm = (int) sqrt(m);
+	num_threads
+
 //		3. For 0 <= i <= sqm - 1,
 //					let B_i = ( b_isqm+1, ... , b_(i+1)sqm - 1 )
 //					let A_i = ( a_j[i]+1, ... , a_j[i+1] )
