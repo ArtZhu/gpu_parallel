@@ -12,6 +12,8 @@
 
 inline void cstart();
 inline void cend(float * cputime);
+inline void cmstart();
+inline void cmend(float * cputime);
 inline void gstart();
 inline void gend(float * gputime);
 
@@ -36,6 +38,21 @@ inline void cend(float * cputime)
 	*cputime = (float) (cpu_end - cpu_start) / CLOCKS_PER_SEC * 1000.0;
 }
 
+//--------------------------------------------------------
+//	CPU microsec
+//--------------------------------------------------------
+struct timeval mu_start, mu_end, mu_val;
+
+inline void cmstart() { gettimeofday(&mu_start, NULL); }
+//cend
+inline void cmend(float * cputime) 
+{ 
+	gettimeofday(&mu_end, NULL);
+
+	timersub(&mu_end, &mu_start, &mu_val);
+	*cputime = (long int) mu_val.tv_sec;
+	*cputime += ((long int) mu_val.tv_usec) * 0.000001;
+}
 //------------------------------------------------------------------------
 //	GPU
 //------------------------------------------------------------------------

@@ -85,9 +85,9 @@ int main(int argc, char * argv[])
 	unsigned int num_blocks = (1023 + num_threads) / 1024;
 	unsigned int threads_per_block = num_threads > 1024 ? 1024 : num_threads;
 
-	ret_idx = 10086;
+	ret_idx_dev = 10086;
 
-	printf("launching %u blocks, %u threads per block.\n", num_blocks, threads_per_block);
+	//printf("launching %u blocks, %u threads per block.\n", num_blocks, threads_per_block);
 
 	d->Dg = {num_blocks, 1, 1};
 	d->Db = {threads_per_block, 1, 1};
@@ -100,20 +100,26 @@ int main(int argc, char * argv[])
 	gstart();
 	search_main<<<1, 1>>>(dev_X, X_len, d_child, target, num_threads, c, q);
 	gend(&gputime);
-	printf("gputime : %f ms\n", gputime);
+	//printf("gputime : %f ms\n", gputime);
 	gerror(cudaGetLastError());
 	gerror( cudaDeviceSynchronize() );
 
-	gerror(cudaMemcpyFromSymbol(&ret_idx, dev_ret, sizeof(int), 0, cudaMemcpyDeviceToHost));
-	printf("device idx = %d;\n", ret_idx);
+	gerror(cudaMemcpyFromSymbol(&ret_idx_dev, dev_ret, sizeof(int), 0, cudaMemcpyDeviceToHost));
+	//printf("device idx = %d;\n", ret_idx_dev);
 
-	ret_idx = 10086;
+	ret_idx_host = 10086;
 
 	cstart();
-	ret_idx = cpu_search(host_X + 1, X_len, target);
+	ret_idx_host = cpu_search(host_X + 1, X_len, target);
 	cend(&cputime);
-	printf("cputime : %f ms\n", cputime);
-	printf("host idx = %d;\n", ret_idx);
+	//printf("cputime : %f ms\n", cputime);
+	//printf("host idx = %d;\n", ret_idx_host);
+	if(ret_idx_host == ret_idx_dev){
+		printf("N %f %f\n", gputime, cputime);
+	}else{
+		printf("E %d %d\n", ret_idx_dev, ret_idx_host);
+	}
+
 
 	gerror(cudaFree(dev_X));
 	gerror(cudaFree(c));
@@ -165,6 +171,7 @@ __global__ void compute(number * X, number target, int * c, int * q, int num_thr
 	//sync -- use r, l, p, tid, num_threads;
 	//		 -- set q
 
+	//printf("q[%d] = %d; X[q[%d]] = %d;\n", tid, q[tid], tid, X[q[tid]]);
 	if(target == X[q[tid]]){
 		*dev_ret = q[tid] - 1; // so that ret idx starts from 0
 	}
@@ -196,10 +203,11 @@ __global__ void set_bounds(number * dev_X, int * c, int * q, number target, int 
 		return;
 	}
 
+	//printf("c[%d] = %d; c[%d + 1] = %d;\n", tid, c[tid], tid, c[tid+1]);
 	if(c[tid] < c[tid + 1]){
 		l = q[tid];
 		r = q[tid + 1];
-		//printf("iter : %d; tid : %d setting r, l to be %d %d\n", iter, tid, r, l);
+		//printf("tid : %d setting r, l to be %d %d\n", iter, tid, r, l);
 		//printf("c[%d] = %d; c[%d + 1] = %d;\n", tid, c[tid], tid, c[tid+1]);
 		//printf("tid : %d launching r, l: %d, %d\n", tid, r, l);
 		launch_children(dev_X, r, l, d_child, target, c, q, num_threads);
@@ -224,7 +232,7 @@ __device__ void launch_children(number * dev_X, int r, int l, exec_dim_t * d_chi
 	
 	unsigned int num_blocks, threads_per_block;
 
-	num_threads = len > num_threads ? num_threads : len;
+	num_threads = len > num_threads ? num_threads : len - 1;
 	threads_per_block = num_threads > 1024? 1024 : num_threads;
 	num_blocks = (1023 + num_threads) / 1024;
 	d_child->Dg = {num_blocks, 1, 1};

@@ -42,10 +42,10 @@ inline void gpu_search()
 		compute<<<d->Dg, d->Db>>>(dev_X, target, c, q, num_threads, &dev_ret);
 		set_bounds<<<d->Dg, d->Db>>>(c, q, num_threads);
 		gerror(cudaMemcpyFromSymbol(&host_ret_flag, dev_ret_flag, sizeof(int), 0, cudaMemcpyDeviceToHost));
-		gerror(cudaMemcpyFromSymbol(&ret_idx, dev_ret, sizeof(int), 0, cudaMemcpyDeviceToHost));
-	}while(ret_idx < 0 && !host_ret_flag);
+		gerror(cudaMemcpyFromSymbol(&ret_idx_dev, dev_ret, sizeof(int), 0, cudaMemcpyDeviceToHost));
+	}while(ret_idx_dev < 0 && !host_ret_flag);
 	//3.
-	if(ret_idx < 0){
+	if(ret_idx_dev < 0){
 		set_ret1<<<d->Dg, d->Db>>>(dev_X, target, c, q, num_threads);
 		set_ret2<<<d->Dg, d->Db>>>(c, num_threads);
 	}
@@ -77,9 +77,9 @@ int main(int argc, char * argv[])
 	unsigned int num_blocks = (1023 + num_threads) / 1024;
 	unsigned int threads_per_block = num_threads > 1024 ? 1024 : num_threads;
 
-	ret_idx = 10086;
+	ret_idx_dev = 10086;
 
-	printf("launching %u blocks, %u threads per block.\n", num_blocks, threads_per_block);
+	//printf("launching %u blocks, %u threads per block.\n", num_blocks, threads_per_block);
 
 	d->Dg = {num_blocks, 1, 1};
 	d->Db = {threads_per_block, 1, 1};
@@ -87,20 +87,25 @@ int main(int argc, char * argv[])
 	gstart();
 	gpu_search();
 	gend(&gputime);
-	printf("gputime : %f ms\n", gputime);
+	//printf("gputime : %f ms\n", gputime);
 	gerror(cudaGetLastError());
 	gerror( cudaDeviceSynchronize() );
 
-	gerror(cudaMemcpyFromSymbol(&ret_idx, dev_ret, sizeof(int), 0, cudaMemcpyDeviceToHost));
-	printf("device idx = %d;\n", ret_idx);
+	gerror(cudaMemcpyFromSymbol(&ret_idx_dev, dev_ret, sizeof(int), 0, cudaMemcpyDeviceToHost));
+	//printf("device idx = %d;\n", ret_idx_dev);
 
-	ret_idx = 10086;
+	ret_idx_host = 10086;
 
 	cstart();
-	ret_idx = cpu_search(host_X + 1, X_len, target);
+	ret_idx_host = cpu_search(host_X + 1, X_len, target);
 	cend(&cputime);
-	printf("cputime : %f ms\n", cputime);
-	printf("host idx = %d;\n", ret_idx);
+	//printf("cputime : %f ms\n", cputime);
+	if(ret_idx_host == ret_idx_dev){
+		printf("N %f %f\n", gputime, cputime);
+	}else{
+		printf("E %d %d\n", ret_idx_dev, ret_idx_host);
+	}
+	//printf("host idx = %d;\n", ret_idx_host);
 
 	gerror(cudaFree(dev_X));
 	gerror(cudaFree(c));
@@ -158,7 +163,7 @@ __global__ void compute(number * X, number target, int * c, int * q, int num_thr
 	 */
 
 	if(target == X[q[tid]]){
-		*dev_ret = q[tid] - 1; // so that ret idx starts from 0
+		*dev_ret = q[tid]; 
 		// can i return here???
 		// no
 		//return;
@@ -222,7 +227,7 @@ __global__ void set_ret1(number * X, number target, int * c, int * q, int num_th
 	}
 
 	if(target == X[l+tid]){
-		dev_ret = l + tid - 1; // so that ret idx starts from 0
+		dev_ret = l + tid;
 	}
 	else if(target > X[l+tid]){
 		c[tid] = 0;
@@ -262,7 +267,7 @@ __global__ void set_ret2(int * c, int num_threads)
 		return;
 
 	if(c[tid-1] < c[tid])
-		dev_ret = l + tid - 1 - 1; // so that ret idx starts from 0
+		dev_ret = l + tid - 1; 
 
 #ifdef PRETTY_PRINT
 	printf("dev ret2 : %d\n", dev_ret);

@@ -42,7 +42,7 @@ __device__ int iter = 0;
 __device__ int dev_ret = 0;
 __device__ int dev_ret_flag = 0;
 //int * dev_flag_ptr, * dev_ret_ptr;
-int ret_idx;
+int ret_idx_dev, ret_idx_host;
 int host_ret_flag = 0;
 
 // step 1.

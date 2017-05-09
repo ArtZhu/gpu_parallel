@@ -72,7 +72,9 @@ __device__ void search(number * X, int n, number target, int * c, int * q, int n
 
 	//2.
 
+#ifdef PRETTY_PRINT
 	int count = 0;
+#endif
 	while(*r - *l > num_threads){
 #ifdef PRETTY_PRINT
 		if(tid == 1)
@@ -145,7 +147,9 @@ __device__ void search(number * X, int n, number target, int * c, int * q, int n
 
 
 
+#ifdef PRETTY_PRINT
 		count++;
+#endif
 	}
 
 
@@ -232,7 +236,7 @@ __global__ void search_main(number * X, int n, number target, int num_threads, v
 	// doesn't work for non-pow 2
 	int tmp_n = n / dev_ret_len;
 
-	num_threads = num_threads > 1024 ? 1024 : num_threads;
+	//num_threads = num_threads > 1024 ? 1024 : num_threads;
 
 	search(X, tmp_n, target, c, q, num_threads, dev_ret, l, r, flags, found);
 
@@ -263,18 +267,11 @@ __global__ void search_main(number * X, int n, number target, int num_threads, v
 		}
 	}else{
 		if(tid < gridDim.x - 1){
-			int count;
-			count = 0;
 			while(atomicCAS(flags + tid, 1, 1) != 1) 
-				//{ count++; }
 				{}
-				//{if(count < 2) printf("%d count %d\n", tid, count++); }
 
-			count = 0;
 			while(atomicCAS(flags + tid + 1, 1, 1) != 1) 
-				//{ count++; }
 				{}
-				//{if(count < 2) printf("%d count %d\n", tid, count++); }
 			//cudaDeviceSynchronize();
 
 			fix(dev_ret, dev_ret_len, tmp_n, ret_value);
@@ -282,9 +279,6 @@ __global__ void search_main(number * X, int n, number target, int num_threads, v
 	}
 
 	__threadfence();
-
-	if(threadIdx.x + blockIdx.x * blockDim.x == 0)
-		printf("gpu found : %d\n", *dev_ret);
 
 }
 
@@ -303,6 +297,8 @@ int main(int argc, char * argv[])
 	
 	cudaSetDevice(0);
 	cudaDeviceReset();
+
+	num_threads = num_threads > X_len ? num_threads : X_len;
 
 	unsigned int num_blocks = (1023 + num_threads) / 1024;
 	unsigned int threads_per_block = num_threads > 1024 ? 1024 : num_threads;
@@ -333,7 +329,7 @@ int main(int argc, char * argv[])
 	d->Dg = {num_blocks, 1, 1};
 	d->Db = {threads_per_block, 1, 1};
 	d->Ns = 3 * sizeof(int) + 2 * (2 + threads_per_block) * sizeof(int);
-	printf("Ns : %d\n", d->Ns);
+	//printf("Ns : %lu\n", d->Ns);
 	gstart();
 	search_main<<<d->Dg, d->Db, d->Ns>>>(dev_X, X_len, target, num_threads, dev_ret, num_blocks, ret_value, flags);
 	gend(&gputime);

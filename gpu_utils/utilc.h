@@ -13,6 +13,8 @@
 
 inline void cstart();
 inline void cend(float * cputime);
+inline void cmstart();
+inline void cmend(float * cputime);
 inline void gstart();
 inline void gend(float * gputime);
 

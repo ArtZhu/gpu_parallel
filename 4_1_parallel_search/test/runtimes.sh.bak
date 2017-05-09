@@ -1,0 +1,28 @@
+
+ALG="parallel_search"
+
+for y in ../v[124567]*
+do
+	cd $y;
+	nvcc -std=c++11 -ccbin g++ -I../../common/inc -dc -arch=sm_35 -o "$ALG.o" -c "$ALG.cu";
+	/usr/local/cuda-8.0/bin/nvcc -ccbin g++ -arch=sm_35 -o "$ALG" "$ALG.o" -lcudadevrt;
+	rm $y/*.o;
+	echo $y;
+done
+
+cd ../test;
+
+while read p; do
+	length=${p##* };
+	p=${p% *};
+	threadnum=${p##* };
+	p=${p% *};
+	target=${p## *};
+	echo "#t $target l $length-element n $threadnum";
+
+	for y in ../v[124567]* 
+	do
+		echo "${y#\/*}";
+		timeout 1s $y/parallel_search -l $length -t $threadnum $target;
+	done
+done <testcases.txt > runtimes.txt

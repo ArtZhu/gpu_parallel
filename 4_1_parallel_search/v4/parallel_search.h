@@ -32,7 +32,7 @@ unsigned int num_threads;
 	unsigned int q_size;
 
 // GPU
-__device__ number * dev_X;
+number * dev_X;
 int * flags;
 
 __device__ void search(number * X, int n, number target, int * c, int * q, int num_threads, volatile int * dev_ret, int * l, int * r, int * flags, int * found);

@@ -20,14 +20,21 @@ __global__ void search_main(number * X, int n, number target, int num_threads, u
 	ptr = (int *) ptr_u;
 
 	if(threadIdx.x == 0){
-		record = atomicCAS(dev_ret, -2L, 0);
+		if(target > X[n-1]){
+			*ptr = n; *(ptr+1) = n;
+			if(blockIdx.x == 0)
+				atomicExch(dev_ret, record);
+		}else{
+			record = atomicCAS(dev_ret, (ull) -2L, 0);
+			//record = *dev_ret;
+		}
 	}
 
 	__syncthreads();
 	l = *ptr;
 	r = *(ptr+1);
 
-	//printf("%llx %u %d %d\n", -2L, threadIdx.x, l, r);
+	//printf("%llx %u %d %d\n", (ull) -2L, threadIdx.x, l, r);
 
 	int block_n, start, s, idx;
 	while(r - l > 1){
@@ -36,8 +43,7 @@ __global__ void search_main(number * X, int n, number target, int num_threads, u
 		if(threadIdx.x == 0 && blockIdx.x == 0){
 			printf("%llx\n", record);
 			printf("%d %d\n", l, r);
-		}
-		*/
+		}*/
 
 		block_n = (r - l) / gridDim.x;
 		
@@ -46,21 +52,42 @@ __global__ void search_main(number * X, int n, number target, int num_threads, u
 
 		start = l + (blockIdx.x * block_n);
 
+		/*
+		if(threadIdx.x == 0)
+			printf("blockIdx.x : %d; block_n : %d; s : %d; start : %d\n", blockIdx.x, block_n, s, start);
+		*/
+
 		idx = start + threadIdx.x * s;
 		if(idx < r){
 
 			//printf("threadIdx.x : %u\nblock_n : %d\ns : %d\nstart : %d\nidx : %d\n", threadIdx.x, block_n, s, start, idx);
-
+			
 			if(X[idx] <= target && X[idx + s] >= target){
 				*ptr = idx;
 				*(ptr+1) = idx+s;
 
 				atomicExch(dev_ret, *ptr_u);
+				//printf("threadIdx : %d from block %d : %d %d\n", threadIdx.x, blockIdx.x, *ptr, *(ptr+1));
 			}
+
+			/*
+			if((threadIdx.x == blockDim.x - 1)){
+			//if(threadIdx.x + blockIdx.x * blockDim.x == num_threads - 1)
+				if(X[idx+s] <= target){
+					*ptr = idx+s;
+
+					if(atomicCAS(dev_ret, (ull) -2L, 0) == record){
+						atomicExch(dev_ret, *ptr_u);
+						printf("threadIdx : %d from block %d : %d %d\n", threadIdx.x, blockIdx.x, *ptr, *(ptr+1));
+					}
+				}
+			}
+			*/
 		}
 
 		if(threadIdx.x == 0){
-			record = atomicCAS(dev_ret, -2L, 0);
+			record = atomicCAS(dev_ret, (ull) -2L, 0);
+			//record = *dev_ret;
 		}
 
 		__syncthreads();
@@ -71,9 +98,9 @@ __global__ void search_main(number * X, int n, number target, int num_threads, u
 	/*
 	if(threadIdx.x == 0 && blockIdx.x == 0){
 		printf("%llx\n", record);
-		printf("%d %d\n", l, r);
-	}
-	*/
+		printf("%d %d %d\n", l, r, r - l);
+	}*/
+
 	
 }
 
@@ -88,7 +115,7 @@ int main(int argc, char * argv[])
 
 	cudaError_t err_code[10];
 	float gputime, cputime;
-	int ret_idx, * ret_value;
+	int ret_idx_dev, ret_idx_host;
 	ull ret_ull, * dev_ret;
 	
 	cudaSetDevice(0);
@@ -104,7 +131,7 @@ int main(int argc, char * argv[])
 	for(int i=0; i<2; i++){ gerror(err_code[i]); }
 
 	int _dev_ret[2];
-	_dev_ret[0] = 0; _dev_ret[1] = X_len + 2;
+	_dev_ret[0] = 0; _dev_ret[1] = X_len + 1;
 
 	gerror(cudaMemcpy(dev_ret, _dev_ret, sizeof(ull), cudaMemcpyHostToDevice));
 
@@ -112,32 +139,39 @@ int main(int argc, char * argv[])
 
 	cudaDeviceSynchronize();
 
-	ret_idx = 10086;
+	ret_idx_dev = 10086;
 
-	printf("launching %u blocks, %u threads per block.\n", num_blocks, threads_per_block);
+	//printf("launching %u blocks, %u threads per block.\n", num_blocks, threads_per_block);
 
 	d->Dg = {num_blocks, 1, 1};
 	d->Db = {threads_per_block, 1, 1};
 	d->Ns = sizeof(ull);
-	printf("Ns : %lu\n", d->Ns);
+	//printf("Ns : %lu\n", d->Ns);
 	gstart();
 	search_main<<<d->Dg, d->Db, d->Ns>>>(dev_X, X_len, target, num_threads, dev_ret);
 	gend(&gputime);
-	printf("gputime : %f ms\n", gputime);
+	//printf("gputime : %f ms\n", gputime);
 	gerror( cudaGetLastError() );
 	gerror( cudaDeviceSynchronize() );
 
 	gerror(cudaMemcpy(&ret_ull, dev_ret, sizeof(ull), cudaMemcpyDeviceToHost));
-	int * ptr = (int *) &ret_ull;
-	printf("device idx = %d;\n", ptr[0]);
+	ret_idx_dev = *((int *) &ret_ull);
+		//printf("%llx\n", ret_ull);
+		//printf("%d %d\n", *((int *) &ret_ull), *(((int *) &ret_ull)+1));
+	//printf("device idx = %d;\n", ret_idx_dev);
 
-	ret_idx = 10086;
+	ret_idx_host = 10086;
 
 	cstart();
-	ret_idx = cpu_search(host_X + 1, X_len, target);
+	ret_idx_host = cpu_search(host_X + 1, X_len, target);
 	cend(&cputime);
-	printf("cputime : %f ms\n", cputime);
-	printf("host idx = %d;\n", ret_idx);
+	//printf("cputime : %f ms\n", cputime);
+	//printf("host idx = %d;\n", ret_idx_host);
+	if(ret_idx_host - ret_idx_dev <= 1){
+		printf("N %f %f\n", gputime, cputime);
+	}else{
+		printf("E %d %d\n", ret_idx_dev, ret_idx_host);
+	}
 
 	gerror(cudaFree(dev_X));
 	gerror(cudaFree(dev_ret));
@@ -176,6 +210,8 @@ void _init(int argc, char ** argv)
 							len_spec = 1;
 						}
 						break;
+					default:
+						sscanf(argv[i], "%d", &target);
 				}
 				break;
 			default:

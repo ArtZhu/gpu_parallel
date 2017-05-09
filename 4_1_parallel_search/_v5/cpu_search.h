@@ -35,11 +35,11 @@ int cpu_search(number * X, int n, number target)
 	while(X[idx] > target){
 		idx--;
 	}
-	while(X[idx+1] <= target){
+	while(X[idx+1] <= target && idx < n){
 		idx++;
 	}
 
-	return idx+1;
+	return idx == n ? idx : idx+1;
 }
 
 #endif

@@ -74,7 +74,9 @@ __device__ void search(number * X, int n, number target, int * c, int * q, int n
 
 	//2.
 
+#ifdef PRETTY_PRINT
 	int count = 0;
+#endif
 	while(*r - *l > num_threads){
 #ifdef PRETTY_PRINT
 		if(tid == 1)
@@ -147,7 +149,9 @@ __device__ void search(number * X, int n, number target, int * c, int * q, int n
 
 
 
+#ifdef PRETTY_PRINT
 		count++;
+#endif
 	}
 
 
@@ -160,7 +164,7 @@ __device__ void search(number * X, int n, number target, int * c, int * q, int n
 		if(tid <= *r - *l){
 
 			if(target == X[*l+tid]){
-				*dev_ret = *l + tid; // so that ret idx starts from 0
+				*dev_ret = *l + tid; // not so that ret idx starts from 0
 				__threadfence();
 				atomicExch(flags + blockIdx.x, 1);
 			//printf("flag[%d] marked\n", blockIdx.x);
@@ -185,9 +189,9 @@ __device__ void search(number * X, int n, number target, int * c, int * q, int n
 			if(*found) return;
 
 			if(c[tid-1] < c[tid])
-				*dev_ret = *l + tid - 1; // so that ret idx starts from 0
+				*dev_ret = *l + tid - 1; // not so that ret idx starts from 0
 			if(tid == *r - *l && c[tid] == 0)
-				*dev_ret = *r - 1; // so that ret idx starts from 0
+				*dev_ret = *r - 1; // not so that ret idx starts from 0
 
 #ifdef PRETTY_PRINT
 			if(tid == 1)
@@ -213,7 +217,7 @@ __device__ void fix(volatile int * dev_ret, int dev_ret_len, int n, int * ret_va
 		printf("%d n\n", n);
 	*/
 	if(dev_ret[tid] > dev_ret[tid+1] && dev_ret[tid+1] == 0){
-		printf("%d tid %d %d\n", tid, dev_ret[tid], dev_ret[tid+1]);
+		//printf("%d tid %d %d\n", tid, dev_ret[tid], dev_ret[tid+1]);
 		*ret_value = tid * n + dev_ret[tid];
 	}
 
@@ -259,18 +263,10 @@ __global__ void search_main(number * X, int n, number target, int * c, int * q, 
 		}
 	}else{
 		if(tid < gridDim.x - 1){
-			int count;
-			count = 0;
 			while(atomicCAS(flags + tid, 1, 1) != 1) 
-				//{ count++; }
 				{}
-				//{if(count < 2) printf("%d count %d\n", tid, count++); }
-
-			count = 0;
 			while(atomicCAS(flags + tid + 1, 1, 1) != 1) 
-				//{ count++; }
 				{}
-				//{if(count < 2) printf("%d count %d\n", tid, count++); }
 			//cudaDeviceSynchronize();
 
 			fix(dev_ret, dev_ret_len, tmp_n, ret_value);
@@ -278,9 +274,6 @@ __global__ void search_main(number * X, int n, number target, int * c, int * q, 
 	}
 
 	__threadfence();
-
-	if(threadIdx.x + blockIdx.x * blockDim.x == 0)
-		printf("gpu found : %d\n", *dev_ret);
 
 }
 
@@ -295,7 +288,7 @@ int main(int argc, char * argv[])
 
 	cudaError_t err_code[10];
 	float gputime, cputime;
-	int ret_idx, * dev_ret, * ret_value;
+	int ret_idx_dev, ret_idx_host, * dev_ret, * ret_value;
 	
 	cudaSetDevice(0);
 	cudaDeviceReset();
@@ -322,9 +315,9 @@ int main(int argc, char * argv[])
 
 	cudaDeviceSynchronize();
 
-	ret_idx = 10086;
+	ret_idx_dev = 10086;
 
-	printf("launching %u blocks, %u threads per block.\n", num_blocks, threads_per_block);
+	//printf("launching %u blocks, %u threads per block.\n", num_blocks, threads_per_block);
 
 	d->Dg = {num_blocks, 1, 1};
 	d->Db = {threads_per_block, 1, 1};
@@ -332,20 +325,25 @@ int main(int argc, char * argv[])
 	gstart();
 	search_main<<<d->Dg, d->Db, d->Ns>>>(dev_X, X_len, target, c, q, num_threads, dev_ret, l, r, num_blocks, ret_value, flags);
 	gend(&gputime);
-	printf("gputime : %f ms\n", gputime);
+	//printf("gputime : %f ms\n", gputime);
 	gerror(cudaGetLastError());
 	gerror( cudaDeviceSynchronize() );
 
-	gerror(cudaMemcpy(&ret_idx, ret_value, sizeof(int), cudaMemcpyDeviceToHost));
-	printf("device idx = %d;\n", ret_idx);
+	gerror(cudaMemcpy(&ret_idx_dev, ret_value, sizeof(int), cudaMemcpyDeviceToHost));
+	//printf("device idx = %d;\n", ret_idx_dev);
 
-	ret_idx = 10086;
+	ret_idx_host = 10086;
 
 	cstart();
-	ret_idx = cpu_search(host_X + 1, X_len, target);
+	ret_idx_host = cpu_search(host_X + 1, X_len, target);
 	cend(&cputime);
-	printf("cputime : %f ms\n", cputime);
-	printf("host idx = %d;\n", ret_idx);
+	//printf("cputime : %f ms\n", cputime);
+	//printf("host idx = %d;\n", ret_idx_host);
+	if(ret_idx_host == ret_idx_dev){
+		printf("N %f %f\n", gputime, cputime);
+	}else{
+		printf("E %d %d\n", ret_idx_dev, ret_idx_host);
+	}
 
 	gerror(cudaFree(dev_X));
 	gerror(cudaFree(c));
